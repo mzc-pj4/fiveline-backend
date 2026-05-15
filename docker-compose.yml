@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aiops
+      POSTGRES_PASSWORD: aiops_dev_password
+      POSTGRES_DB: aiops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiops -d aiops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:4-standalone
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DB_SCHEMA: user_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: "60"
+      SERVICE_NAME: user-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./user-service:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DB_SCHEMA: product_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      SERVICE_NAME: product-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./product-service:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DB_SCHEMA: order_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      PRODUCT_SERVICE_URL: http://product-service:8000
+      SERVICE_NAME: order-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+      FAILURE_RATE: "0.05"
+      SLOW_RATE: "0.03"
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./order-service:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  postgres_data:
