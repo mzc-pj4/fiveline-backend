@@ -1,16 +1,16 @@
 # fiveline-backend
 
-team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드 + 인프라 IaC** 모노레포.
+team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드 서비스** 레포.
 
 | 영역 | 폴더 |
 |---|---|
 | 샘플 이커머스 마이크로서비스 (FastAPI × 3) | `user-service/`, `product-service/`, `order-service/` |
 | 로컬 개발 환경 | `docker-compose.yml`, `infra/postgres-init.sql` |
-| AWS 인프라 IaC | `infrastructure/` (Terraform: bootstrap, network, environments) |
 | 운영 플랫폼 placeholder | `platform/` (Glue Job, Lambda 등 W4~W7) |
 | 아키텍처·운영 문서 | `docs/`, `CLAUDE.md` |
 
 프론트엔드는 별도 repo: [fiveline-frontend](https://github.com/mzc-pj4/fiveline-frontend)
+AWS 인프라 IaC는 별도 Terraform repo에서 관리합니다.
 
 ## 빠른 시작 — 백엔드 로컬 개발
 
@@ -18,16 +18,14 @@ team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫
 
 ### 1) 환경변수 파일 준비 (최초 1회)
 
-각 서비스 폴더에 `.env.example` 파일이 있어요. 이걸 `.env` 로 복사:
+레포 루트의 `.env.example` 파일을 `.env` 로 복사:
 
 ```powershell
-copy user-service\.env.example user-service\.env
-copy product-service\.env.example product-service\.env
-copy order-service\.env.example order-service\.env
+copy .env.example .env
 ```
 
-> Docker Compose로만 띄울 거면 `.env` 없어도 작동합니다 (docker-compose.yml에 환경변수가 inline으로 있음).
-> 로컬에서 `uvicorn app.main:app` 같이 직접 실행할 때 `.env` 필요.
+> Docker Compose는 루트 `.env` 값을 읽습니다. `.env`는 Git에 올리지 않습니다.
+> 서비스별 `.env.example`은 `uvicorn app.main:app`처럼 Docker 없이 직접 실행할 때 참고용입니다.
 
 ### 2) Docker Compose로 띄우기
 
@@ -64,25 +62,22 @@ docker compose exec order-service alembic upgrade head
 - http://localhost:8002/docs
 - http://localhost:8003/docs
 
-## AWS 인프라 (W1 산출물)
+## AWS 인프라
 
-- bootstrap apply 완료 — S3 `team4-aiops-tfstate-089955620282`, DynamoDB `team4-aiops-tflock` 실제 살아있음
-- dev VPC는 plan 검증만, apply 보류 (NAT GW 시간당 과금 절감)
-- GitHub Actions `infra-plan` / `infra-apply` 코드 준비 (OIDC role/secret 등록 대기)
-
-상세: `infrastructure/README.md`(준비 중), [docs/architecture.md](docs/architecture.md)
+Terraform 코드는 백엔드 repo에서 분리하고 별도 IaC repo에서 관리합니다.
+현재 백엔드 배포 대상은 EKS + RDS PostgreSQL이며, 프론트엔드는 S3 + CloudFront로 배포합니다.
+배포 환경변수 기준은 [docs/deployment-env.md](docs/deployment-env.md)를 참고하세요.
 
 ## 8주 일정 위치
 
-W2 — 샘플 워크로드 구현 (현재 단계). 다음 W3에서 EKS + Fargate + Argo CD로 배포 파이프라인.
+W2 — 샘플 워크로드 구현. 다음 단계에서 EKS + RDS + S3/CloudFront 배포 파이프라인을 구성합니다.
 
 ## 기술 스택
 
 - Python 3.12 + FastAPI + SQLAlchemy 2.0 + Alembic + Pydantic v2
 - PostgreSQL 16 (서비스별 스키마 분리)
-- Terraform 1.7+ (AWS provider v5/v6)
 - Docker Compose (로컬 dev)
-- 예정: ECR / EKS Fargate / Helm / Argo CD / Bedrock Agent / Athena / Glue
+- 예정: ECR / EKS / Helm 또는 Kubernetes manifests / Argo CD / Bedrock Agent / Athena / Glue
 
 ## 발생 서비스 이벤트
 
