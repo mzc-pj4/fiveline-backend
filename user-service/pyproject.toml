@@ -1,7 +1,7 @@
 [project]
 name = "user-service"
 version = "0.1.0"
-description = "team4-aiops user-service: auth, signup, login, JWT issuance"
+description = "mzc-pj4 user-service: auth, signup, login, JWT issuance"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",

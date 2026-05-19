@@ -1,7 +1,7 @@
 [project]
 name = "product-service"
 version = "0.1.0"
-description = "team4-aiops product-service: products, search, reviews"
+description = "mzc-pj4 product-service: products, search, reviews"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",

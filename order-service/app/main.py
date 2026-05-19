@@ -18,7 +18,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="order-service",
     version="0.1.0",
-    description="team4-aiops cart + orders + failure simulation",
+    description="mzc-pj4 cart + orders + failure simulation",
     lifespan=lifespan,
 )
 

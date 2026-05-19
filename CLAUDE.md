@@ -6,32 +6,31 @@ AWS에서 운영 중인 워크로드의 메트릭·로그·비용·구성 데이
 
 ## 도메인
 
-샘플 이커머스 워크로드 (CloudFront → ALB → ECS Fargate → RDS PostgreSQL 흐름). 도메인 자체가 핵심이 아니라 "어떤 워크로드든 운영 자동화 가능"을 증명하는 샘플.
+샘플 이커머스 워크로드 (CloudFront → ALB → EKS → RDS PostgreSQL 흐름). 도메인 자체가 핵심이 아니라 "어떤 워크로드든 운영 자동화 가능"을 증명하는 샘플.
 
 ## 아키텍처 레이어
 
-1. 운영 대상 워크로드(이커머스 샘플): CloudFront + S3 정적 웹 + ALB + ECS Fargate + RDS PostgreSQL + NAT GW
+1. 운영 대상 워크로드(이커머스 샘플): CloudFront + S3 정적 웹 + ALB + EKS + RDS PostgreSQL + NAT GW
 2. 데이터 수집·저장: CloudWatch(Metrics/Logs/Alarm), Cost Explorer/CUR, AWS Config, Resource Tagging API, Resource Checker Lambda → S3 Data Lake(raw/cleansed/aggregated) + DynamoDB
 3. 시각화·AI·알림: Grafana, QuickSight, Amazon Bedrock Agent, Slack 알림, 자동 리포트
 4. 자동화·배포·IaC: Terraform + GitHub Actions + OIDC
 
 ## 확정 값 (W1)
 
-- project_name: `team4-aiops`
+- project_name: `mzc-pj4`
 - AWS 계정 ID: `089955620282`
 - 리전: `ap-northeast-2`
-- Terraform state: S3 `team4-aiops-tfstate-089955620282` + DynamoDB `team4-aiops-tflock`
+- Terraform state: S3 `mzc-pj4-tfstate-089955620282` + DynamoDB `mzc-pj4-tflock`
 - GitHub repos (mzc-pj4 org):
   - 백엔드 + IaC: `mzc-pj4/fiveline-backend`
   - 프론트엔드: `mzc-pj4/fiveline-frontend`
   - (legacy 첫 push: `Kjihoo/aws-aiops-platform` — 더 이상 사용 안 함)
 
-## W1 목표 (완료)
+## W1 목표
 
 - 모노레포 초기 셋업
-- Terraform 백엔드 부트스트랩 (apply 완료)
-- Network 모듈 작성 (plan 검증 완료, apply 보류 — 비용 절감)
-- GitHub Actions infra-plan / infra-apply 작성 (OIDC role/secret 등록은 사용자 액션 대기)
+- Terraform 백엔드 부트스트랩 (미적용 — 인프라 레포 분리로 이관)
+- 인프라 IaC는 별도 Terraform 레포에서 관리
 
 ## 주의 사항
 

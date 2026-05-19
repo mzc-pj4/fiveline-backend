@@ -17,7 +17,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="user-service",
     version="0.1.0",
-    description="team4-aiops auth + user management",
+    description="mzc-pj4 auth + user management",
     lifespan=lifespan,
 )
 
