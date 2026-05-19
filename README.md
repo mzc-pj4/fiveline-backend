@@ -16,6 +16,21 @@ team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫
 
 전제: Docker Desktop 실행 중.
 
+### 1) 환경변수 파일 준비 (최초 1회)
+
+각 서비스 폴더에 `.env.example` 파일이 있어요. 이걸 `.env` 로 복사:
+
+```powershell
+copy user-service\.env.example user-service\.env
+copy product-service\.env.example product-service\.env
+copy order-service\.env.example order-service\.env
+```
+
+> Docker Compose로만 띄울 거면 `.env` 없어도 작동합니다 (docker-compose.yml에 환경변수가 inline으로 있음).
+> 로컬에서 `uvicorn app.main:app` 같이 직접 실행할 때 `.env` 필요.
+
+### 2) Docker Compose로 띄우기
+
 ```powershell
 docker compose up --build
 ```
