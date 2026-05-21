@@ -1,6 +1,6 @@
 # product-service
 
-team4-aiops 상품·리뷰 마이크로서비스.
+mzc-pj4 상품·리뷰 마이크로서비스.
 
 ## 엔드포인트
 

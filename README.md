@@ -1,12 +1,11 @@
 # fiveline-backend
 
-team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드 + 인프라 IaC** 모노레포.
+team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드** 모노레포.
 
 | 영역 | 폴더 |
 |---|---|
 | 샘플 이커머스 마이크로서비스 (FastAPI × 3) | `user-service/`, `product-service/`, `order-service/` |
 | 로컬 개발 환경 | `docker-compose.yml`, `infra/postgres-init.sql` |
-| AWS 인프라 IaC | `infrastructure/` (Terraform: bootstrap, network, environments) |
 | 운영 플랫폼 placeholder | `platform/` (Glue Job, Lambda 등 W4~W7) |
 | 아키텍처·운영 문서 | `docs/`, `CLAUDE.md` |
 
@@ -64,17 +63,16 @@ docker compose exec order-service alembic upgrade head
 - http://localhost:8002/docs
 - http://localhost:8003/docs
 
-## AWS 인프라 (W1 산출물)
+## AWS 인프라
 
-- bootstrap apply 완료 — S3 `team4-aiops-tfstate-089955620282`, DynamoDB `team4-aiops-tflock` 실제 살아있음
-- dev VPC는 plan 검증만, apply 보류 (NAT GW 시간당 과금 절감)
-- GitHub Actions `infra-plan` / `infra-apply` 코드 준비 (OIDC role/secret 등록 대기)
+- 인프라 IaC는 별도 Terraform 레포에서 관리 (S3/DynamoDB 백엔드 포함 미적용)
+- 목표 state backend: S3 `mzc-pj4-tfstate-089955620282`, DynamoDB `mzc-pj4-tflock`
 
-상세: `infrastructure/README.md`(준비 중), [docs/architecture.md](docs/architecture.md)
+상세: [docs/architecture.md](docs/architecture.md)
 
 ## 8주 일정 위치
 
-W2 — 샘플 워크로드 구현 (현재 단계). 다음 W3에서 EKS + Fargate + Argo CD로 배포 파이프라인.
+W2 — 샘플 워크로드 구현 (현재 단계). 다음 W3에서 EKS + ArgoCD로 배포 파이프라인.
 
 ## 기술 스택
 
@@ -82,7 +80,7 @@ W2 — 샘플 워크로드 구현 (현재 단계). 다음 W3에서 EKS + Fargate
 - PostgreSQL 16 (서비스별 스키마 분리)
 - Terraform 1.7+ (AWS provider v5/v6)
 - Docker Compose (로컬 dev)
-- 예정: ECR / EKS Fargate / Helm / Argo CD / Bedrock Agent / Athena / Glue
+- 예정: ECR / EKS / Helm / ArgoCD / Bedrock Agent / Athena / Glue
 
 ## 발생 서비스 이벤트
 
