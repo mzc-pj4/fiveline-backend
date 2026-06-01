@@ -1,6 +1,6 @@
 # 아키텍처 개요
 
-team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
+mzc-pj4 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 
 ## 도메인
 
@@ -8,9 +8,7 @@ team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 
 ## 레포 디렉터리
 
-- 백엔드 서비스: `user-service/`, `product-service/`, `order-service/`
-- 프론트엔드: 별도 `fiveline-frontend` repo
-- Terraform IaC: 별도 repo
+- `user-service/`, `product-service/`, `order-service/`: 샘플 이커머스 마이크로서비스 (FastAPI)
 - `platform/`: 운영 플랫폼 (Lambda, Glue, Grafana 대시보드)
 - `docs/`: 아키텍처, runbook, ADR
 
@@ -18,7 +16,7 @@ team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 
 ```
 이커머스 워크로드
-  (CloudFront / ALB Ingress / EKS / RDS / NAT / IAM)
+  (CloudFront / ALB / EKS / RDS / NAT / IAM)
         │
         ▼  수집 (6 sources)
   CW(Metrics·Logs·Alarm) · Cost Explorer / CUR · Config · Tagging API · Resource Checker Lambda
@@ -39,8 +37,8 @@ team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 
 | 소스 | 수집 대상 | 주기 | 1차 저장지 |
 |---|---|---|---|
-| CloudWatch Metrics | ALB(요청수/응답시간/4xx·5xx), EKS/Pod/Node(CPU/Mem/상태), RDS(연결/IOPS/Latency), CloudFront, NAT | 1~5분 | S3 raw + CW |
-| CloudWatch Logs | EKS 애플리케이션 로그, Lambda 로그 | 실시간 | CW Logs → S3 |
+| CloudWatch Metrics | ALB(요청수/응답시간/4xx·5xx), EKS(CPU/Mem/Pod수), RDS(연결/IOPS/Latency), CloudFront, NAT | 1~5분 | S3 raw + CW |
+| CloudWatch Logs | EKS Pod 로그, Lambda 로그 | 실시간 | CW Logs → S3 |
 | CloudWatch Alarm | 임계 초과 이벤트 (5xx>5%, CPU>80% 등) | 이벤트 | DynamoDB `alarm_history` |
 | Cost Explorer + CUR | 서비스별·일자별 비용, 증감률, 태그별 비용 | CE 일1회 / CUR AWS 자동 | S3 `raw/cost-explorer`, `raw/cur`, DynamoDB `cost_summary` |
 | AWS Config | 리소스 구성 스냅샷, 규칙 위반 (Public S3, 22번 오픈, 백업 미설정 등) | 변경 발생 시 | S3 + Config 콘솔 |
@@ -48,7 +46,7 @@ team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 
 ### 저장 구조
 
-**S3 Data Lake** (`s3://team4-aiops-data-lake/`)
+**S3 Data Lake** (`s3://mzc-pj4-data-lake/`)
 - `raw/`: 수집 그대로 (수집 시점 보존)
 - `cleansed/`: 스키마 통일, 시간대 통일, 결측 처리
 - `aggregated/`: 시간별·일별·서비스별 롤업
@@ -65,7 +63,7 @@ team4-aiops 플랫폼 아키텍처와 데이터 수집 레이어 설계 문서.
 |---|---|
 | ALB 5xx 에러율 | 5분 평균 5% 초과 |
 | ALB TargetResponseTime | 2초 초과 |
-| EKS Pod/Node CPU/Memory | 80% 초과 |
+| EKS CPU/Memory | 80% 초과 |
 | RDS CPU | 80% 초과 |
 | RDS DatabaseConnections | 임계치 초과 (인스턴스 크기별) |
 | TargetGroup HealthyHostCount | 1 미만 |

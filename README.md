@@ -1,6 +1,6 @@
 # fiveline-backend
 
-team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드 서비스** 레포.
+team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫폼의 **백엔드** 모노레포.
 
 | 영역 | 폴더 |
 |---|---|
@@ -10,7 +10,6 @@ team mzc-pj4 / fiveline — AWS AI 기반 인프라 운영·비용 분석 플랫
 | 아키텍처·운영 문서 | `docs/`, `CLAUDE.md` |
 
 프론트엔드는 별도 repo: [fiveline-frontend](https://github.com/mzc-pj4/fiveline-frontend)
-AWS 인프라 IaC는 별도 Terraform repo에서 관리합니다.
 
 ## 빠른 시작 — 백엔드 로컬 개발
 
@@ -18,14 +17,16 @@ AWS 인프라 IaC는 별도 Terraform repo에서 관리합니다.
 
 ### 1) 환경변수 파일 준비 (최초 1회)
 
-레포 루트의 `.env.example` 파일을 `.env` 로 복사:
+각 서비스 폴더에 `.env.example` 파일이 있어요. 이걸 `.env` 로 복사:
 
 ```powershell
-copy .env.example .env
+copy user-service\.env.example user-service\.env
+copy product-service\.env.example product-service\.env
+copy order-service\.env.example order-service\.env
 ```
 
-> Docker Compose는 루트 `.env` 값을 읽습니다. `.env`는 Git에 올리지 않습니다.
-> 서비스별 `.env.example`은 `uvicorn app.main:app`처럼 Docker 없이 직접 실행할 때 참고용입니다.
+> Docker Compose로만 띄울 거면 `.env` 없어도 작동합니다 (docker-compose.yml에 환경변수가 inline으로 있음).
+> 로컬에서 `uvicorn app.main:app` 같이 직접 실행할 때 `.env` 필요.
 
 ### 2) Docker Compose로 띄우기
 
@@ -64,20 +65,22 @@ docker compose exec order-service alembic upgrade head
 
 ## AWS 인프라
 
-Terraform 코드는 백엔드 repo에서 분리하고 별도 IaC repo에서 관리합니다.
-현재 백엔드 배포 대상은 EKS + RDS PostgreSQL이며, 프론트엔드는 S3 + CloudFront로 배포합니다.
-배포 환경변수 기준은 [docs/deployment-env.md](docs/deployment-env.md)를 참고하세요.
+- 인프라 IaC는 별도 Terraform 레포에서 관리 (S3/DynamoDB 백엔드 포함 미적용)
+- 목표 state backend: S3 `mzc-pj4-tfstate-089955620282`, DynamoDB `mzc-pj4-tflock`
+
+상세: [docs/architecture.md](docs/architecture.md)
 
 ## 8주 일정 위치
 
-W2 — 샘플 워크로드 구현. 다음 단계에서 EKS + RDS + S3/CloudFront 배포 파이프라인을 구성합니다.
+W2 — 샘플 워크로드 구현 (현재 단계). 다음 W3에서 EKS + ArgoCD로 배포 파이프라인.
 
 ## 기술 스택
 
 - Python 3.12 + FastAPI + SQLAlchemy 2.0 + Alembic + Pydantic v2
 - PostgreSQL 16 (서비스별 스키마 분리)
+- Terraform 1.7+ (AWS provider v5/v6)
 - Docker Compose (로컬 dev)
-- 예정: ECR / EKS / Helm 또는 Kubernetes manifests / Argo CD / Bedrock Agent / Athena / Glue
+- 예정: ECR / EKS / Helm / ArgoCD / Bedrock Agent / Athena / Glue
 
 ## 발생 서비스 이벤트
 

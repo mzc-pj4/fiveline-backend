@@ -1,7 +1,7 @@
 [project]
 name = "order-service"
 version = "0.1.0"
-description = "team4-aiops order-service: cart, orders, failure simulation"
+description = "mzc-pj4 order-service: cart, orders, failure simulation"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",
