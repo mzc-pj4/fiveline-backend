@@ -63,4 +63,4 @@ jobs:
         run: aws eks update-kubeconfig --name team4-aiops-dev-eks --region ${{ env.AWS_REGION }}
 
       - name: Deploy to EKS
-        run: kubectl rollout restart deployment/order-service -n default
+        run: kubectl rollout restart deployment/order-service -n fiveline
