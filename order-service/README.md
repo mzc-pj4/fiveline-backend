@@ -45,3 +45,4 @@ docker compose exec order-service alembic upgrade head
 ## 액세스 로그
 
 모든 요청에 대해 자동 JSON 액세스 로그 (`api_path`, `http_method`, `status_code`, `response_time_ms`, `trace_id`).
+
