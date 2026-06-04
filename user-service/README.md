@@ -36,3 +36,4 @@ docker compose -f apps/docker-compose.yml up user-service postgres
 - `USER_SIGNUP`
 - `USER_LOGIN`
 - `USER_LOGIN_FAILED`
+
