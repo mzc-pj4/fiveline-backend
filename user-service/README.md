@@ -2,6 +2,7 @@
 
 mzc-pj4 의 인증·사용자 마이크로서비스. 회원가입·로그인·JWT 발급 담당.
 
+
 ## 엔드포인트
 
 - `POST /api/auth/signup` — 회원가입 (이메일·비밀번호·이름 → 토큰)
@@ -35,3 +36,4 @@ docker compose -f apps/docker-compose.yml up user-service postgres
 - `USER_SIGNUP`
 - `USER_LOGIN`
 - `USER_LOGIN_FAILED`
+

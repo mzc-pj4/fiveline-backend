@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+COPY requirements.txt ./
 RUN pip install --upgrade pip \
- && pip install -e .
+ && pip install -r requirements.txt
 
 COPY . .
 

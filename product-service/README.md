@@ -29,3 +29,4 @@ docker compose exec product-service alembic upgrade head
 - `PRODUCT_VIEW`
 - `REVIEW_CREATED`
 - `REVIEW_FAILED`
+

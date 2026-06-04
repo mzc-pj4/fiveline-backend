@@ -1,7 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class DirectOrderCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int = Field(ge=1, default=1)
 
 
 class OrderItemPublic(BaseModel):
