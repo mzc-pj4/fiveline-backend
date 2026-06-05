@@ -19,9 +19,37 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd user-service
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test@localhost/test
+          JWT_SECRET: test-secret-key
+        run: |
+          cd user-service
+          pytest tests/ -v
+
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - name: Checkout code
@@ -47,20 +75,21 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-  deploy:
-    name: Deploy to EKS
+  update-manifest:
+    name: Update Manifest Repo
     runs-on: ubuntu-latest
     needs: build-and-push
 
     steps:
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name team4-aiops-dev-eks --region ${{ env.AWS_REGION }}
-
-      - name: Deploy to EKS
-        run: kubectl rollout restart deployment/user-service -n fiveline
+      - name: Update image tag in manifest repo
+        env:
+          IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
+        run: |
+          git clone https://x-access-token:${{ secrets.MANIFEST_REPO_TOKEN }}@github.com/mzc-pj4/fiveline_k8s_manifest.git
+          cd fiveline_k8s_manifest
+          sed -i "s|fiveline-ecr/user-service:.*|fiveline-ecr/user-service:${IMAGE_TAG}|" user-service/user-service.yaml
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          git add user-service/user-service.yaml
+          git commit -m "chore: update user-service image tag to ${IMAGE_TAG}"
+          git push
