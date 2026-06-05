@@ -40,7 +40,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://test:test@localhost/test
+          DATABASE_URL: postgresql+psycopg://test:test@localhost/test
           JWT_SECRET: test-secret-key
         run: |
           cd user-service
