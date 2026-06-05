@@ -19,9 +19,37 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd user-service
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost/test
+          JWT_SECRET: test-secret-key
+        run: |
+          cd user-service
+          pytest tests/ -v
+
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - name: Checkout code
