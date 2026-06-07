@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,6 +37,7 @@ def test_login_success():
         password_hash=hash_password("password123"),
         name="테스트",
         role="customer",
+        created_at=datetime.now(),
     )
     app.dependency_overrides[get_db] = override_db(mock_user)
 
@@ -57,6 +59,7 @@ def test_login_fail_wrong_password():
         password_hash=hash_password("password123"),
         name="테스트",
         role="customer",
+        created_at=datetime.now(),
     )
     app.dependency_overrides[get_db] = override_db(mock_user)
 
