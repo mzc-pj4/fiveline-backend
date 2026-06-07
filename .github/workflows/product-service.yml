@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-      - dev
-      - feat/cicd-pipeline
+    paths:
+      - "product-service/**"
+  pull_request:
     paths:
       - "product-service/**"
 

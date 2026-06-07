@@ -42,3 +42,4 @@ docker compose -f apps/docker-compose.yml up user-service postgres
 
 
 
+
