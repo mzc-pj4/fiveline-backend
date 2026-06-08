@@ -67,7 +67,7 @@ jobs:
           args: >
             -Dsonar.organization=mzc-pj4
             -Dsonar.projectKey=mzc-pj4_fiveline-backend
-            -Dsonar.sources=user-service,product-service,order-service
+            -Dsonar.sources=user-service
             -Dsonar.python.version=3.12
 
   dependency-check:
@@ -79,25 +79,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          project: user-service
-          path: user-service
-          format: HTML
-          args: --failOnCVSS 7
+          python-version: "3.12"
 
-      - name: Upload report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dependency-check-report
-          path: reports/
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r user-service/requirements.txt --severity high
 
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: dependency-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout code
@@ -141,7 +137,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:dev-${{ github.run_number }}-${{ github.sha }}
           format: table
           severity: CRITICAL,HIGH
           exit-code: 1
@@ -151,6 +147,7 @@ jobs:
     name: Update Manifest Repo
     runs-on: ubuntu-latest
     needs: trivy-scan
+    environment: production
 
     steps:
       - name: Update image tag in manifest repo
@@ -166,35 +163,35 @@ jobs:
           git commit -m "chore: update user-service image tag to ${IMAGE_TAG}"
           git push
 
-  # notify:
-  #   name: Notify
-  #   runs-on: ubuntu-latest
-  #   needs: update-manifest
-  #   if: always()
-  #
-  #   steps:
-  #     - name: Slack 알림
-  #       uses: slackapi/slack-github-action@v1
-  #       with:
-  #         payload: |
-  #           {
-  #             "text": "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} *user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}*\n브랜치: ${{ github.ref_name }}\n실행자: ${{ github.actor }}\n커밋: ${{ github.sha }}"
-  #           }
-  #       env:
-  #         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-  #
-  #     - name: 이메일 알림
-  #       uses: dawidd6/action-send-mail@v3
-  #       with:
-  #         server_address: smtp.gmail.com
-  #         server_port: 465
-  #         username: ${{ secrets.EMAIL_USERNAME }}
-  #         password: ${{ secrets.EMAIL_PASSWORD }}
-  #         subject: "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}"
-  #         to: ${{ secrets.EMAIL_USERNAME }}
-  #         from: ${{ secrets.EMAIL_USERNAME }}
-  #         body: |
-  #           브랜치: ${{ github.ref_name }}
-  #           실행자: ${{ github.actor }}
-  #           커밋: ${{ github.sha }}
-  #           결과: ${{ needs.update-manifest.result }}
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: update-manifest
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Slack 알림
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} *user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}*\n브랜치: ${{ github.head_ref || github.ref_name }}\n실행자: ${{ github.actor }}\n커밋: ${{ github.sha }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: 이메일 알림
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}"
+          to: ${{ secrets.EMAIL_USERNAME }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+          body: |
+            브랜치: ${{ github.ref_name }}
+            실행자: ${{ github.actor }}
+            커밋: ${{ github.sha }}
+            결과: ${{ needs.update-manifest.result }}
