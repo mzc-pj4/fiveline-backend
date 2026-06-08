@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-      - dev
-      - feat/cicd-pipeline
+    paths:
+      - "user-service/**"
+  pull_request:
     paths:
       - "user-service/**"
 
@@ -36,7 +37,7 @@ jobs:
         run: |
           cd user-service
           pip install -r requirements.txt
-          pip install pytest httpx
+          pip install "psycopg[binary]" pytest httpx
 
       - name: Run tests
         env:
@@ -46,10 +47,57 @@ jobs:
           cd user-service
           pytest tests/ -v
 
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=mzc-pj4
+            -Dsonar.projectKey=mzc-pj4_fiveline-backend
+            -Dsonar.sources=user-service,product-service,order-service
+            -Dsonar.python.version=3.12
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    needs: sonarcloud
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: user-service
+          path: user-service
+          format: HTML
+          args: --failOnCVSS 7
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: reports/
+
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
-    needs: test
+    needs: dependency-check
 
     steps:
       - name: Checkout code
@@ -75,10 +123,34 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+  trivy-scan:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+
   update-manifest:
     name: Update Manifest Repo
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: trivy-scan
 
     steps:
       - name: Update image tag in manifest repo
@@ -93,3 +165,36 @@ jobs:
           git add user-service/user-service.yaml
           git commit -m "chore: update user-service image tag to ${IMAGE_TAG}"
           git push
+
+  # notify:
+  #   name: Notify
+  #   runs-on: ubuntu-latest
+  #   needs: update-manifest
+  #   if: always()
+  #
+  #   steps:
+  #     - name: Slack 알림
+  #       uses: slackapi/slack-github-action@v1
+  #       with:
+  #         payload: |
+  #           {
+  #             "text": "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} *user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}*\n브랜치: ${{ github.ref_name }}\n실행자: ${{ github.actor }}\n커밋: ${{ github.sha }}"
+  #           }
+  #       env:
+  #         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  #
+  #     - name: 이메일 알림
+  #       uses: dawidd6/action-send-mail@v3
+  #       with:
+  #         server_address: smtp.gmail.com
+  #         server_port: 465
+  #         username: ${{ secrets.EMAIL_USERNAME }}
+  #         password: ${{ secrets.EMAIL_PASSWORD }}
+  #         subject: "${{ needs.update-manifest.result == 'success' && '✅' || '❌' }} user-service 배포 ${{ needs.update-manifest.result == 'success' && '성공' || '실패' }}"
+  #         to: ${{ secrets.EMAIL_USERNAME }}
+  #         from: ${{ secrets.EMAIL_USERNAME }}
+  #         body: |
+  #           브랜치: ${{ github.ref_name }}
+  #           실행자: ${{ github.actor }}
+  #           커밋: ${{ github.sha }}
+  #           결과: ${{ needs.update-manifest.result }}
