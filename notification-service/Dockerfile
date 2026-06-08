@@ -7,8 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml ./
-RUN pip install --upgrade pip \
- && pip install -e .
+RUN pip install --upgrade pip && pip install .
 
 COPY . .
 

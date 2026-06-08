@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,13 @@ class Settings(BaseSettings):
     database_url: str
     jwt_secret: str
     jwt_algorithm: str = "HS256"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _fix_db_driver(cls, v: str) -> str:
+        if v.startswith("postgresql://") or v.startswith("postgres://"):
+            return v.replace("://", "+psycopg://", 1)
+        return v
 
     user_schema: str = "user_schema"
     product_schema: str = "product_schema"
