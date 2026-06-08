@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
+from fastapi import HTTPException, status
 
 from app.core.config import settings
 
@@ -17,6 +18,15 @@ def verify_password(plain: str, hashed: str) -> bool:
         return bcrypt.checkpw(pw, hashed.encode("utf-8"))
     except ValueError:
         return False
+
+
+def decode_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
 
 
 def issue_access_token(subject: str, extra_claims: dict | None = None) -> str:

@@ -45,3 +45,16 @@ Thumbs.db
 
 # Logs
 *.log
+
+# 로컬 개발 전용 스크립트
+*.ps1
+svc_*.sh
+run_*_local.sh
+
+# 디버그 산출물
+debug_*.html
+debug_*.png
+debug_*.py
+
+# 상품 이미지 (용량이 커서 git에 포함하지 않음)
+product-service/static/images/

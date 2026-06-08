@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
-    product_service_url: str = "http://product-service:8000"
+    product_service_url: str = "http://product-service:8002"
     product_service_timeout_s: float = 3.0
 
     failure_rate: float = 0.05

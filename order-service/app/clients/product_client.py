@@ -4,13 +4,18 @@ import httpx
 
 from app.core.config import settings
 
+# 모듈 레벨 공유 클라이언트 — TCP 연결 재사용 (keep-alive)
+_client = httpx.Client(
+    timeout=settings.product_service_timeout_s,
+    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+)
+
 
 class ProductInfo:
-    def __init__(self, id: int, name: str, price: Decimal, stock_quantity: int) -> None:
+    def __init__(self, id: int, name: str, price: Decimal) -> None:
         self.id = id
         self.name = name
         self.price = price
-        self.stock_quantity = stock_quantity
 
 
 class ProductClientError(Exception):
@@ -24,7 +29,7 @@ class ProductNotFound(ProductClientError):
 def get_product(product_id: int) -> ProductInfo:
     url = f"{settings.product_service_url}/api/products/{product_id}"
     try:
-        response = httpx.get(url, timeout=settings.product_service_timeout_s)
+        response = _client.get(url)
     except httpx.HTTPError as exc:
         raise ProductClientError(f"product-service unreachable: {exc}") from exc
 
@@ -38,5 +43,4 @@ def get_product(product_id: int) -> ProductInfo:
         id=data["id"],
         name=data["name"],
         price=Decimal(str(data["price"])),
-        stock_quantity=data["stock_quantity"],
     )

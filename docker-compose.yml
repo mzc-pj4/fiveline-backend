@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: aiops
-      POSTGRES_PASSWORD: aiops_dev_password
-      POSTGRES_DB: aiops
+      POSTGRES_USER: fiveline
+      POSTGRES_PASSWORD: fiveline_dev_password
+      POSTGRES_DB: fiveline
     ports:
       - "5432:5432"
     volumes:
@@ -31,11 +31,11 @@ services:
       context: ./user-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DATABASE_URL: postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline
       DB_SCHEMA: user_schema
       JWT_SECRET: dev-only-jwt-secret-change-in-prod
       JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: "60"
+      JWT_EXPIRE_MINUTES: "30"
       SERVICE_NAME: user-service
       LOG_LEVEL: INFO
       ENVIRONMENT: dev
@@ -46,14 +46,15 @@ services:
         condition: service_healthy
     volumes:
       - ./user-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   product-service:
     build:
       context: ./product-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DATABASE_URL: postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline
       DB_SCHEMA: product_schema
       JWT_SECRET: dev-only-jwt-secret-change-in-prod
       JWT_ALGORITHM: HS256
@@ -67,14 +68,15 @@ services:
         condition: service_healthy
     volumes:
       - ./product-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   order-service:
     build:
       context: ./order-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://aiops:aiops_dev_password@postgres:5432/aiops
+      DATABASE_URL: postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline
       DB_SCHEMA: order_schema
       JWT_SECRET: dev-only-jwt-secret-change-in-prod
       JWT_ALGORITHM: HS256
@@ -89,9 +91,60 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      product-service:
+        condition: service_started
     volumes:
       - ./order-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  admin-service:
+    build:
+      context: ./admin-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline
+      USER_SCHEMA: user_schema
+      PRODUCT_SCHEMA: product_schema
+      ORDER_SCHEMA: order_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      SERVICE_NAME: admin-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./admin-service:/app
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline
+      DB_SCHEMA: notification_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      SQS_QUEUE_URL: ""
+      AWS_REGION: ap-northeast-2
+      SERVICE_NAME: notification-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+    ports:
+      - "8005:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./notification-service:/app
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
   postgres_data:
