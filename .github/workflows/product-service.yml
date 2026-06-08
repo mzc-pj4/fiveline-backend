@@ -87,7 +87,7 @@ jobs:
       - name: Run pip-audit
         run: |
           pip install pip-audit
-          pip-audit -r product-service/requirements.txt --severity high
+          pip-audit -r product-service/requirements.txt
 
   build-and-push:
     name: Build & Push to ECR
