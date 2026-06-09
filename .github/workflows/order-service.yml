@@ -150,18 +150,27 @@ jobs:
     environment: production
 
     steps:
-      - name: Update image tag in manifest repo
+      - name: Update image tag and create PR
         env:
           IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
+          GH_TOKEN: ${{ secrets.MANIFEST_REPO_TOKEN }}
         run: |
           git clone https://x-access-token:${{ secrets.MANIFEST_REPO_TOKEN }}@github.com/mzc-pj4/fiveline_k8s_manifest.git
           cd fiveline_k8s_manifest
+          BRANCH=deploy/order-service-${{ github.run_number }}
+          git checkout -b $BRANCH
           sed -i "s|fiveline-ecr/order-service:.*|fiveline-ecr/order-service:${IMAGE_TAG}|" order-service/order-service.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
           git add order-service/order-service.yaml
           git commit -m "chore: update order-service image tag to ${IMAGE_TAG}"
-          git push
+          git push origin $BRANCH
+          gh pr create \
+            --repo mzc-pj4/fiveline_k8s_manifest \
+            --title "chore: update order-service image tag to ${IMAGE_TAG}" \
+            --body "자동 생성된 PR입니다.\n\n서비스: order-service\n이미지 태그: ${IMAGE_TAG}\n실행자: ${{ github.actor }}" \
+            --base main \
+            --head $BRANCH
 
   notify:
     name: Notify
