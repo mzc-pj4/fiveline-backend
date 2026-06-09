@@ -1,22 +1,39 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.routes import dashboard, health
+from app.routes import auth, dashboard, health
+
+STATIC_DIR = Path(__file__).parent.parent / "static"
 
 app = FastAPI(title="admin-service", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "https://d330d0cjfkz4e7.cloudfront.net"],
+    allow_origins=[
+        "http://localhost:8004",
+        "http://127.0.0.1:8004",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(dashboard.router)
 
+if STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-@app.get("/")
-def root():
-    return {"service": "admin-service", "docs": "/docs"}
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        return FileResponse(STATIC_DIR / "index.html")
+else:
+    @app.get("/")
+    def root():
+        return {"service": "admin-service", "docs": "/docs"}

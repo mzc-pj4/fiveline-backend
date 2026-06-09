@@ -14,6 +14,7 @@ class ReviewPublic(BaseModel):
     id: int
     product_id: int
     user_id: int
+    reviewer_name: str | None = None
     rating: int
     content: str
     created_at: datetime

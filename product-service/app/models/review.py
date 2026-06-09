@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, Text, func
+from sqlalchemy import ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
@@ -17,6 +17,7 @@ class Review(Base):
         nullable=False,
     )
     user_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    reviewer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

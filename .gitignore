@@ -24,6 +24,13 @@ dist/
 venv/
 .python-version
 
+# Node.js / Frontend
+node_modules/
+*/node_modules/
+
+# 크롤링 데이터 (용량 큼)
+product-service/products.json
+
 # Env / secrets
 .env
 .env.*
@@ -58,3 +65,7 @@ debug_*.py
 
 # 상품 이미지 (용량이 커서 git에 포함하지 않음)
 product-service/static/images/
+
+# Admin frontend 빌드 산출물
+admin-service/admin-frontend/dist/
+admin-service/static/

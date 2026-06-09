@@ -35,6 +35,7 @@ def create_review(
     review = Review(
         product_id=product_id,
         user_id=current_user.user_id,
+        reviewer_name=current_user.name or None,
         rating=payload.rating,
         content=payload.content,
     )

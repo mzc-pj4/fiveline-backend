@@ -35,3 +35,13 @@ class TokenResponse(BaseModel):
 class UserUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     phone: str | None = Field(default=None, max_length=20)
+
+
+class AdminRegisterRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    employee_id: str = Field(min_length=1, max_length=50)
+
+
+class AdminLoginRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    employee_id: str = Field(min_length=1, max_length=50)

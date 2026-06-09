@@ -1,18 +1,15 @@
 """
-무신사 상품 데이터 수집 후 DB 시드 (무한스크롤 방식).
-사용법: python scripts/seed_musinsa.py [--force]
+무신사 상품 크롤링 → JSON 저장 (DB 불필요).
+사용법: python scripts/crawl_musinsa.py [--out products.json]
 """
 import argparse
+import json
 import random
 import sys
 import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app.db.session import SessionLocal
-from app.models.product import Product
 
 CATEGORIES = [
     ("상의",         "001", 2000),
@@ -57,6 +54,7 @@ def parse_goods(goods_list: list, category: str) -> list[dict]:
                 "original_price": original_price,
                 "image_url": image_url,
                 "category": category,
+                "stock_quantity": random.randint(10, 200),
             })
         except Exception:
             continue
@@ -122,18 +120,8 @@ def fetch_category(cat_code: str, target: int, category: str, browser) -> list[d
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--out", default="products.json")
     args = parser.parse_args()
-
-    with SessionLocal() as db:
-        existing = db.query(Product).count()
-        if existing > 0 and not args.force:
-            print(f"이미 {existing}개 상품 존재. --force 로 강제 실행")
-            return
-        if args.force:
-            db.query(Product).delete()
-            db.commit()
-            print("기존 상품 삭제 완료")
 
     all_items: list[dict] = []
 
@@ -157,23 +145,11 @@ def main():
             seen.add(key)
             unique_items.append(item)
 
-    print(f"\n수집 {len(all_items)}개 → 중복 제거 후 {len(unique_items)}개. DB 삽입 중...")
+    out_path = Path(args.out)
+    out_path.write_text(json.dumps(unique_items, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    with SessionLocal() as db:
-        for item in unique_items:
-            db.add(Product(
-                name=item["name"],
-                description=None,
-                category=item["category"],
-                brand=item["brand"],
-                price=item["price"],
-                original_price=item.get("original_price"),
-                stock_quantity=random.randint(10, 200),
-                image_url=item["image_url"],
-            ))
-        db.commit()
-
-    print(f"\n완료: {len(unique_items)}개 무신사 상품 삽입됨")
+    print(f"\n수집 {len(all_items)}개 → 중복 제거 후 {len(unique_items)}개")
+    print(f"저장 완료: {out_path.resolve()}")
     for cat, _, _ in CATEGORIES:
         cnt = sum(1 for i in unique_items if i["category"] == cat)
         print(f"  {cat}: {cnt}개")

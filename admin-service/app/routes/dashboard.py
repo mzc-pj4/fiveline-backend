@@ -28,7 +28,7 @@ def get_dashboard(
     """)).mappings().all()
 
     user_count = db.execute(text(f"""
-        SELECT COUNT(*) as count FROM {settings.user_schema}.users
+        SELECT COUNT(*) as count FROM {settings.user_schema}.users WHERE role != 'admin'
     """)).mappings().one()
 
     product_count = db.execute(text(f"""
@@ -69,14 +69,21 @@ def list_orders(
     page: int = 1,
     size: int = 20,
     status: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_admin),
 ):
-    where = f"WHERE o.status = :status" if status else ""
-    offset = (page - 1) * size
-    params: dict = {"size": size, "offset": offset}
+    conditions = []
+    params: dict = {"size": size, "offset": (page - 1) * size}
+
     if status:
+        conditions.append("o.status = :status")
         params["status"] = status
+    if q:
+        conditions.append("(u.name ILIKE :q OR u.email ILIKE :q)")
+        params["q"] = f"%{q}%"
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     orders = db.execute(text(f"""
         SELECT o.id, o.total_price, o.status, o.created_at,
@@ -88,9 +95,12 @@ def list_orders(
         LIMIT :size OFFSET :offset
     """), params).mappings().all()
 
-    count_params = {"status": status} if status else {}
+    count_params = {k: v for k, v in params.items() if k not in ("size", "offset")}
     total = db.execute(text(f"""
-        SELECT COUNT(*) as count FROM {settings.order_schema}.orders o {where}
+        SELECT COUNT(*) as count
+        FROM {settings.order_schema}.orders o
+        JOIN {settings.user_schema}.users u ON o.user_id = u.id
+        {where}
     """), count_params).mappings().one()["count"]
 
     return {"items": [dict(o) for o in orders], "total": total, "page": page, "size": size}
@@ -100,20 +110,30 @@ def list_orders(
 def list_users(
     page: int = 1,
     size: int = 20,
+    q: str | None = None,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_admin),
 ):
     offset = (page - 1) * size
+    params: dict = {"size": size, "offset": offset}
+    search_clause = ""
+    if q:
+        search_clause = "AND (name ILIKE :q OR email ILIKE :q)"
+        params["q"] = f"%{q}%"
+
     users = db.execute(text(f"""
         SELECT id, email, name, role, phone, created_at
         FROM {settings.user_schema}.users
+        WHERE role != 'admin' {search_clause}
         ORDER BY created_at DESC
         LIMIT :size OFFSET :offset
-    """), {"size": size, "offset": offset}).mappings().all()
+    """), params).mappings().all()
 
+    count_params = {"q": params["q"]} if q else {}
     total = db.execute(text(f"""
         SELECT COUNT(*) as count FROM {settings.user_schema}.users
-    """)).mappings().one()["count"]
+        WHERE role != 'admin' {search_clause}
+    """), count_params).mappings().one()["count"]
 
     return {"items": [dict(u) for u in users], "total": total, "page": page, "size": size}
 
@@ -123,14 +143,21 @@ def list_products(
     page: int = 1,
     size: int = 20,
     category: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_admin),
 ):
-    where = "WHERE category = :category" if category else ""
-    offset = (page - 1) * size
-    params: dict = {"size": size, "offset": offset}
+    conditions = []
+    params: dict = {"size": size, "offset": (page - 1) * size}
+
     if category:
+        conditions.append("category = :category")
         params["category"] = category
+    if q:
+        conditions.append("(name ILIKE :q OR brand ILIKE :q)")
+        params["q"] = f"%{q}%"
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     products = db.execute(text(f"""
         SELECT id, name, category, brand, price, stock_quantity, created_at
@@ -140,7 +167,7 @@ def list_products(
         LIMIT :size OFFSET :offset
     """), params).mappings().all()
 
-    count_params = {"category": category} if category else {}
+    count_params = {k: v for k, v in params.items() if k not in ("size", "offset")}
     total = db.execute(text(f"""
         SELECT COUNT(*) as count FROM {settings.product_schema}.products {where}
     """), count_params).mappings().one()["count"]
