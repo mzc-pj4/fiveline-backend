@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.routes import auth, health
-
+# cicd 배포 테스트용 주석
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
