@@ -14,7 +14,7 @@ on:
 env:
   AWS_REGION: ap-northeast-2
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-2.amazonaws.com
-  ECR_REPOSITORY: fiveline-ecr/user-service
+  ECR_REPOSITORY: fiveline/user-service
 
 permissions:
   id-token: write
@@ -160,7 +160,7 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/user-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline-ecr/user-service:.*|fiveline-ecr/user-service:${IMAGE_TAG}|" user-service/user-service.yaml
+          sed -i "s|fiveline/user-service:.*|fiveline/user-service:${IMAGE_TAG}|" user-service/user-service.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
           git add user-service/user-service.yaml
