@@ -1,8 +1,8 @@
 FROM node:20-slim AS frontend-builder
 WORKDIR /admin-frontend
-COPY admin-frontend/package.json ./
+COPY --from=admin-frontend package.json ./
 RUN npm install
-COPY admin-frontend/ ./
+COPY --from=admin-frontend . ./
 RUN npm run build
 
 FROM python:3.12-slim
