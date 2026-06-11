@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     ports:
       - "5432:5432"
     volumes:
@@ -31,14 +31,14 @@ services:
       context: ./user-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DB_SCHEMA: ${USER_SERVICE_DB_SCHEMA}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
-      SERVICE_NAME: ${USER_SERVICE_NAME}
-      LOG_LEVEL: ${LOG_LEVEL}
-      ENVIRONMENT: ${ENVIRONMENT}
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      DB_SCHEMA: "${USER_SERVICE_DB_SCHEMA}"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ALGORITHM: "${JWT_ALGORITHM}"
+      JWT_EXPIRE_MINUTES: "${JWT_EXPIRE_MINUTES}"
+      SERVICE_NAME: "${USER_SERVICE_NAME}"
+      LOG_LEVEL: "${LOG_LEVEL}"
+      ENVIRONMENT: "${ENVIRONMENT}"
     ports:
       - "8001:8000"
     depends_on:
@@ -46,20 +46,21 @@ services:
         condition: service_healthy
     volumes:
       - ./user-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   product-service:
     build:
       context: ./product-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DB_SCHEMA: ${PRODUCT_SERVICE_DB_SCHEMA}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      SERVICE_NAME: ${PRODUCT_SERVICE_NAME}
-      LOG_LEVEL: ${LOG_LEVEL}
-      ENVIRONMENT: ${ENVIRONMENT}
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      DB_SCHEMA: "${PRODUCT_SERVICE_DB_SCHEMA}"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ALGORITHM: "${JWT_ALGORITHM}"
+      SERVICE_NAME: "${PRODUCT_SERVICE_NAME}"
+      LOG_LEVEL: "${LOG_LEVEL}"
+      ENVIRONMENT: "${ENVIRONMENT}"
     ports:
       - "8002:8000"
     depends_on:
@@ -67,34 +68,62 @@ services:
         condition: service_healthy
     volumes:
       - ./product-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   order-service:
     build:
       context: ./order-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DB_SCHEMA: ${ORDER_SERVICE_DB_SCHEMA}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL}
-      PRODUCT_SERVICE_TIMEOUT_S: ${PRODUCT_SERVICE_TIMEOUT_S}
-      SERVICE_NAME: ${ORDER_SERVICE_NAME}
-      LOG_LEVEL: ${LOG_LEVEL}
-      ENVIRONMENT: ${ENVIRONMENT}
-      FAILURE_RATE: ${FAILURE_RATE}
-      SLOW_RATE: ${SLOW_RATE}
-      SLOW_RESPONSE_MS_MIN: ${SLOW_RESPONSE_MS_MIN}
-      SLOW_RESPONSE_MS_MAX: ${SLOW_RESPONSE_MS_MAX}
+      DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      DB_SCHEMA: "${ORDER_SERVICE_DB_SCHEMA}"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ALGORITHM: "${JWT_ALGORITHM}"
+      PRODUCT_SERVICE_URL: "${PRODUCT_SERVICE_URL}"
+      PRODUCT_SERVICE_TIMEOUT_S: "${PRODUCT_SERVICE_TIMEOUT_S}"
+      SERVICE_NAME: "${ORDER_SERVICE_NAME}"
+      LOG_LEVEL: "${LOG_LEVEL}"
+      ENVIRONMENT: "${ENVIRONMENT}"
+      FAILURE_RATE: "${FAILURE_RATE}"
+      SLOW_RATE: "${SLOW_RATE}"
+      SLOW_RESPONSE_MS_MIN: "${SLOW_RESPONSE_MS_MIN}"
+      SLOW_RESPONSE_MS_MAX: "${SLOW_RESPONSE_MS_MAX}"
     ports:
       - "8003:8000"
     depends_on:
       postgres:
         condition: service_healthy
+      product-service:
+        condition: service_started
     volumes:
       - ./order-service:/app
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  admin-service:
+    build:
+      context: ./admin-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgresql+psycopg://fiveline:fiveline_dev_password@postgres:5432/fiveline"
+      USER_SCHEMA: user_schema
+      PRODUCT_SCHEMA: product_schema
+      ORDER_SCHEMA: order_schema
+      JWT_SECRET: dev-only-jwt-secret-change-in-prod
+      JWT_ALGORITHM: HS256
+      SERVICE_NAME: admin-service
+      LOG_LEVEL: INFO
+      ENVIRONMENT: dev
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./admin-service:/app
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
   postgres_data:

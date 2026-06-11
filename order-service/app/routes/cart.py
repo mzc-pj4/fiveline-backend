@@ -14,15 +14,15 @@ from app.schemas.cart import CartItemCreate, CartItemPublic, CartItemUpdate, Car
 router = APIRouter(prefix="/api/cart", tags=["cart"])
 
 
-def _to_public(item: CartItem, product_name: str | None, price: Decimal | None) -> CartItemPublic:
-    line_total = (price or Decimal("0")) * item.quantity
+def _to_public(item: CartItem) -> CartItemPublic:
+    line_total = (item.product_price or Decimal("0")) * item.quantity
     return CartItemPublic(
         id=item.id,
         product_id=item.product_id,
         quantity=item.quantity,
         created_at=item.created_at,
-        product_name=product_name,
-        product_price=price,
+        product_name=item.product_name,
+        product_price=item.product_price,
         line_total=line_total,
     )
 
@@ -49,12 +49,16 @@ def add_to_cart(
 
     if existing:
         existing.quantity += payload.quantity
+        existing.product_name = product.name
+        existing.product_price = product.price
         item = existing
     else:
         item = CartItem(
             user_id=current_user.user_id,
             product_id=payload.product_id,
             quantity=payload.quantity,
+            product_name=product.name,
+            product_price=product.price,
         )
         db.add(item)
     db.commit()
@@ -67,7 +71,7 @@ def add_to_cart(
         quantity=payload.quantity,
         cart_item_id=item.id,
     )
-    return _to_public(item, product.name, product.price)
+    return _to_public(item)
 
 
 @router.get("", response_model=CartView)
@@ -79,15 +83,8 @@ def view_cart(
         select(CartItem).where(CartItem.user_id == current_user.user_id).order_by(CartItem.id)
     ).scalars().all()
 
-    items: list[CartItemPublic] = []
-    total = Decimal("0")
-    for row in rows:
-        try:
-            product = get_product(row.product_id)
-            items.append(_to_public(row, product.name, product.price))
-            total += product.price * row.quantity
-        except ProductClientError:
-            items.append(_to_public(row, None, None))
+    items = [_to_public(row) for row in rows]
+    total = sum((row.product_price or Decimal("0")) * row.quantity for row in rows)
 
     log_service_event("CART_VIEWED", user_id=current_user.user_id, item_count=len(items))
     return CartView(items=items, total_price=total)
@@ -111,11 +108,7 @@ def update_cart_item(
         "CART_ITEM_UPDATED",
         cart_item_id=item.id, user_id=current_user.user_id, quantity=item.quantity,
     )
-    try:
-        product = get_product(item.product_id)
-        return _to_public(item, product.name, product.price)
-    except ProductClientError:
-        return _to_public(item, None, None)
+    return _to_public(item)
 
 
 @router.delete("/items/{cart_item_id}", status_code=status.HTTP_204_NO_CONTENT)

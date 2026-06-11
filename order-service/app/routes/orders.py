@@ -1,4 +1,5 @@
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -119,24 +120,37 @@ def create_order_from_cart(
     db.add(order)
     db.flush()
 
+    # 상품 정보를 병렬로 조회 (N+1 순차 → ThreadPoolExecutor 병렬)
+    def fetch_product(row: CartItem):
+        try:
+            return row, get_product(row.product_id), None
+        except ProductNotFound:
+            return row, None, "PRODUCT_NOT_FOUND"
+        except ProductClientError:
+            return row, None, "PRODUCT_SERVICE_UNREACHABLE"
+
+    product_results: dict[int, tuple] = {}
+    with ThreadPoolExecutor(max_workers=min(len(cart_rows), 10)) as pool:
+        futures = {pool.submit(fetch_product, row): row for row in cart_rows}
+        for future in as_completed(futures):
+            row, product, err = future.result()
+            product_results[row.product_id] = (product, err)
+
     total = Decimal("0")
-    try:
-        for row in cart_rows:
-            product = get_product(row.product_id)
-            if error_code is None and product.stock_quantity < row.quantity:
-                error_code = "OUT_OF_STOCK"
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=row.product_id,
-                quantity=row.quantity,
-                price=product.price,
-            )
-            db.add(order_item)
-            total += product.price * row.quantity
-    except ProductNotFound:
-        error_code = error_code or "PRODUCT_NOT_FOUND"
-    except ProductClientError:
-        error_code = error_code or "PRODUCT_SERVICE_UNREACHABLE"
+    for row in cart_rows:
+        product, fetch_err = product_results.get(row.product_id, (None, "PRODUCT_SERVICE_UNREACHABLE"))
+        if fetch_err:
+            error_code = error_code or fetch_err
+            continue
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=row.product_id,
+            product_name=product.name,
+            quantity=row.quantity,
+            price=product.price,
+        )
+        db.add(order_item)
+        total += product.price * row.quantity
 
     order.total_price = total
     elapsed_ms = int((time.perf_counter() - start) * 1000)

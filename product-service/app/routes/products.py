@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
 from app.core.logging import log_service_event
@@ -14,19 +14,39 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 @router.get("", response_model=ProductList)
 def list_products(
     db: Session = Depends(get_db),
-    keyword: str | None = Query(default=None, max_length=100),
+    q: str | None = Query(default=None, max_length=100, description="상품명/설명 검색"),
     category: str | None = Query(default=None, max_length=50),
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    brand: str | None = Query(default=None, max_length=100),
+    min_price: float | None = Query(default=None, ge=0),
+    max_price: float | None = Query(default=None, ge=0),
+    sort: str | None = Query(default="newest", pattern="^(newest|price_asc|price_desc)$"),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
 ) -> ProductList:
     stmt = select(Product)
-    if keyword:
-        stmt = stmt.where(Product.name.ilike(f"%{keyword}%"))
+    if q:
+        stmt = stmt.where(
+            Product.name.ilike(f"%{q}%") | Product.brand.ilike(f"%{q}%")
+        )
     if category:
         stmt = stmt.where(Product.category == category)
+    if brand:
+        stmt = stmt.where(Product.brand.ilike(f"%{brand}%"))
+    if min_price is not None:
+        stmt = stmt.where(Product.price >= min_price)
+    if max_price is not None:
+        stmt = stmt.where(Product.price <= max_price)
+
+    if sort == "price_asc":
+        stmt = stmt.order_by(asc(Product.price))
+    elif sort == "price_desc":
+        stmt = stmt.order_by(desc(Product.price))
+    else:
+        stmt = stmt.order_by(desc(Product.created_at))
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    rows = db.execute(stmt.order_by(Product.id.desc()).limit(limit).offset(offset)).scalars().all()
+    offset = (page - 1) * size
+    rows = db.execute(stmt.limit(size).offset(offset)).scalars().all()
 
     product_ids = [p.id for p in rows]
     review_agg: dict[int, tuple[float | None, int]] = {}
@@ -44,17 +64,54 @@ def list_products(
         avg, cnt = review_agg.get(p.id, (None, 0))
         items.append(
             ProductListItem(
-                id=p.id, name=p.name, category=p.category, price=p.price,
+                id=p.id, name=p.name, category=p.category, brand=p.brand,
+                price=p.price, original_price=p.original_price,
                 stock_quantity=p.stock_quantity, image_url=p.image_url,
                 average_rating=avg, review_count=cnt,
             )
         )
 
     log_service_event(
-        "PRODUCT_SEARCH" if (keyword or category) else "PRODUCT_LIST_VIEW",
-        keyword=keyword, category=category, result_count=len(items), total=total,
+        "PRODUCT_SEARCH" if (q or category) else "PRODUCT_LIST_VIEW",
+        q=q, category=category, result_count=len(items), total=total,
     )
-    return ProductList(items=items, total=total)
+    return ProductList(items=items, total=total, page=page, size=size)
+
+
+_GENDER_SUFFIXES = (" 우먼", " 맨", " 여성", " 남성", " women", " men")
+
+@router.get("/brands", response_model=list[str])
+def list_brands(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> list[str]:
+    rows = db.execute(
+        select(Product.brand, func.count(Product.id).label("cnt"))
+        .where(Product.brand.isnot(None), Product.brand != "")
+        .group_by(Product.brand)
+        .order_by(desc("cnt"))
+        .limit(limit * 3)  # 필터링 여유분
+    ).all()
+    all_brands = [row.brand for row in rows if row.brand]
+
+    # 베이스 브랜드 목록 (성별 접미사 제거)
+    def base(b: str) -> str:
+        lower = b.lower()
+        for suf in _GENDER_SUFFIXES:
+            if lower.endswith(suf.lower()):
+                return b[: len(b) - len(suf)].strip()
+        return b
+
+    standalone = {b for b in all_brands if base(b) == b}
+
+    result: list[str] = []
+    for b in all_brands:
+        b_base = base(b)
+        if b_base == b or b_base not in standalone:
+            result.append(b)
+        if len(result) >= limit:
+            break
+    return result
 
 
 @router.get("/{product_id}", response_model=ProductPublic)
