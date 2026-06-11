@@ -35,6 +35,8 @@ product-service/products.json
 .env
 .env.*
 !.env.example
+!deploy.env.example
+k8s/secret.yaml
 
 # AWS
 .aws/

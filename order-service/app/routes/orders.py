@@ -12,10 +12,86 @@ from app.db.session import get_db
 from app.deps import CurrentUser, get_current_user
 from app.models.cart import CartItem
 from app.models.order import Order, OrderItem
-from app.schemas.order import OrderPublic
+from app.schemas.order import DirectOrderCreate, OrderPublic
 from app.services.failure_sim import maybe_delay, maybe_fail
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
+
+
+@router.post("/direct", response_model=OrderPublic, status_code=status.HTTP_201_CREATED)
+def create_direct_order(
+    payload: DirectOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> OrderPublic:
+    start = time.perf_counter()
+    slept_ms = maybe_delay()
+    error_code = maybe_fail()
+
+    order = Order(user_id=current_user.user_id, total_price=Decimal("0"), status="PENDING")
+    db.add(order)
+    db.flush()
+
+    total = Decimal("0")
+    try:
+        product = get_product(payload.product_id)
+        if error_code is None and product.stock_quantity < payload.quantity:
+            error_code = "OUT_OF_STOCK"
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=payload.product_id,
+                quantity=payload.quantity,
+                price=product.price,
+            )
+        )
+        total = product.price * payload.quantity
+    except ProductNotFound:
+        error_code = error_code or "PRODUCT_NOT_FOUND"
+    except ProductClientError:
+        error_code = error_code or "PRODUCT_SERVICE_UNREACHABLE"
+
+    order.total_price = total
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    order.response_time_ms = elapsed_ms
+
+    log_service_event(
+        "ORDER_DIRECT",
+        order_id=order.id,
+        user_id=current_user.user_id,
+        product_id=payload.product_id,
+        quantity=payload.quantity,
+        simulated_delay_ms=slept_ms,
+    )
+
+    if error_code:
+        order.status = "FAILED"
+        order.error_code = error_code
+        db.commit()
+        log_service_event(
+            "ORDER_FAILED",
+            order_id=order.id,
+            user_id=current_user.user_id,
+            error_code=error_code,
+            response_time_ms=elapsed_ms,
+            total_price=str(total),
+        )
+    else:
+        order.status = "SUCCESS"
+        db.commit()
+        log_service_event(
+            "ORDER_SUCCESS",
+            order_id=order.id,
+            user_id=current_user.user_id,
+            total_price=str(total),
+            response_time_ms=elapsed_ms,
+        )
+
+    db.refresh(order)
+    full = db.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order.id)
+    ).scalar_one()
+    return OrderPublic.model_validate(full)
 
 
 @router.post("/from-cart", response_model=OrderPublic, status_code=status.HTTP_201_CREATED)
