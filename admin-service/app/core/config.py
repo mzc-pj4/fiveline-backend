@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def _fix_db_driver(cls, v: str) -> str:
-        if v.startswith("postgresql://") or v.startswith("postgres://"):
+        if v.startswith(("postgresql://", "postgres://")):
             return v.replace("://", "+psycopg://", 1)
         return v
 

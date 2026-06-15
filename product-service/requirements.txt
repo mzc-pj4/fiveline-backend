@@ -45,7 +45,7 @@ pydantic-core==2.46.4
     # via pydantic
 pydantic-settings==2.14.1
     # via product-service (pyproject.toml)
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via product-service (pyproject.toml)
 python-dotenv==1.2.2
     # via
@@ -57,7 +57,7 @@ sqlalchemy==2.0.49
     # via
     #   alembic
     #   product-service (pyproject.toml)
-starlette==1.0.0
+starlette==1.0.1
     # via fastapi
 typing-extensions==4.15.0
     # via

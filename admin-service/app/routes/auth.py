@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import Integer, String, select, text
@@ -41,8 +43,8 @@ class AdminTokenResponse(BaseModel):
     role: str
 
 
-@router.post("/register", response_model=AdminTokenResponse, status_code=status.HTTP_201_CREATED)
-def admin_register(payload: AdminRegisterRequest, db: Session = Depends(get_db)) -> AdminTokenResponse:
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+def admin_register(payload: AdminRegisterRequest, db: Annotated[Session, Depends(get_db)]) -> AdminTokenResponse:
     existing = db.execute(
         select(AdminUser).where(AdminUser.employee_id == payload.employee_id)
     ).scalar_one_or_none()
@@ -72,8 +74,8 @@ def admin_register(payload: AdminRegisterRequest, db: Session = Depends(get_db))
     return AdminTokenResponse(access_token=token, name=user.name, role="admin")
 
 
-@router.post("/login", response_model=AdminTokenResponse)
-def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> AdminTokenResponse:
+@router.post("/login")
+def admin_login(payload: AdminLoginRequest, db: Annotated[Session, Depends(get_db)]) -> AdminTokenResponse:
     user = db.execute(
         select(AdminUser).where(
             AdminUser.employee_id == payload.employee_id,
