@@ -31,6 +31,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test@localhost/test
+          JWT_SECRET: test-secret-key
+        run: |
+          cd admin-service
+          pip install -r requirements.txt
+          pip install pytest pytest-cov httpx
+          pytest tests/ -v --cov=app --cov-report=xml:coverage.xml
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -40,8 +55,9 @@ jobs:
           args: >
             -Dsonar.organization=mzc-pj4
             -Dsonar.projectKey=mzc-pj4_fiveline-backend
-            -Dsonar.sources=admin-service
+            -Dsonar.sources=admin-service/app
             -Dsonar.python.version=3.12
+            -Dsonar.python.coverage.reportPaths=admin-service/coverage.xml
 
   dependency-check:
     name: Dependency Check
