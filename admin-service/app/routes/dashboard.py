@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -11,8 +13,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 @router.get("/dashboard")
 def get_dashboard(
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_admin),
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     order_stats = db.execute(text(f"""
         SELECT
@@ -70,8 +72,8 @@ def list_orders(
     size: int = 20,
     status: str | None = None,
     q: str | None = None,
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_admin),
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     conditions = []
     params: dict = {"size": size, "offset": (page - 1) * size}
@@ -111,8 +113,8 @@ def list_users(
     page: int = 1,
     size: int = 20,
     q: str | None = None,
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_admin),
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     offset = (page - 1) * size
     params: dict = {"size": size, "offset": offset}
@@ -144,8 +146,8 @@ def list_products(
     size: int = 20,
     category: str | None = None,
     q: str | None = None,
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_admin),
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     conditions = []
     params: dict = {"size": size, "offset": (page - 1) * size}
@@ -179,8 +181,8 @@ def list_products(
 def update_stock(
     product_id: int,
     stock_quantity: int,
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_admin),
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     db.execute(
         text(f"UPDATE {settings.product_schema}.products SET stock_quantity = :qty WHERE id = :id"),
