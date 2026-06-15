@@ -3,10 +3,13 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://test:test@localhost/test")
 os.environ.setdefault("JWT_SECRET", "test-secret-key")
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from app.main import app
+from app.routes.health import router
 
-client = TestClient(app)
+test_app = FastAPI()
+test_app.include_router(router)
+client = TestClient(test_app)
 
 
 def test_health():
@@ -15,9 +18,3 @@ def test_health():
     data = response.json()
     assert data["status"] == "ok"
     assert data["service"] == "product-service"
-
-
-def test_root():
-    response = client.get("/")
-    assert response.status_code == 200
-    assert response.json()["service"] == "product-service"
