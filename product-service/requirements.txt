@@ -6,8 +6,6 @@
 #
 alembic==1.18.4
     # via product-service (pyproject.toml)
-annotated-doc==0.0.4
-    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
@@ -36,7 +34,7 @@ mako==1.3.12
     # via alembic
 markupsafe==3.0.3
     # via mako
-psycopg2-binary==2.9.10
+psycopg[binary]==3.2.13
     # via product-service (pyproject.toml)
 pydantic[email]==2.13.4
     # via
@@ -47,7 +45,7 @@ pydantic-core==2.46.4
     # via pydantic
 pydantic-settings==2.14.1
     # via product-service (pyproject.toml)
-pyjwt==2.12.1
+pyjwt==2.13.0
     # via product-service (pyproject.toml)
 python-dotenv==1.2.2
     # via
@@ -59,7 +57,7 @@ sqlalchemy==2.0.49
     # via
     #   alembic
     #   product-service (pyproject.toml)
-starlette==1.0.0
+starlette==1.3.1
     # via fastapi
 typing-extensions==4.15.0
     # via
