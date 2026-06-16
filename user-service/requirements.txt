@@ -7,8 +7,6 @@
 #
 alembic==1.18.4
     # via user-service (pyproject.toml)
-annotated-doc==0.0.4
-    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
@@ -64,7 +62,7 @@ sqlalchemy==2.0.49
     # via
     #   alembic
     #   user-service (pyproject.toml)
-starlette==1.0.1
+starlette==1.3.1
     # via fastapi
 typing-extensions==4.15.0
     # via
