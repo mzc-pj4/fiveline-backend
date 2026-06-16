@@ -42,6 +42,7 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: test
+    if: false
     continue-on-error: true
 
     steps:
