@@ -68,12 +68,12 @@ def get_dashboard(
 
 @router.get("/orders")
 def list_orders(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
     page: int = 1,
     size: int = 20,
     status: str | None = None,
     q: str | None = None,
-    db: Annotated[Session, Depends(get_db)],
-    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     conditions = []
     params: dict = {"size": size, "offset": (page - 1) * size}
@@ -110,11 +110,11 @@ def list_orders(
 
 @router.get("/users")
 def list_users(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
     page: int = 1,
     size: int = 20,
     q: str | None = None,
-    db: Annotated[Session, Depends(get_db)],
-    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     offset = (page - 1) * size
     params: dict = {"size": size, "offset": offset}
@@ -142,12 +142,12 @@ def list_users(
 
 @router.get("/products")
 def list_products(
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
     page: int = 1,
     size: int = 20,
     category: str | None = None,
     q: str | None = None,
-    db: Annotated[Session, Depends(get_db)],
-    _: Annotated[CurrentUser, Depends(require_admin)],
 ):
     conditions = []
     params: dict = {"size": size, "offset": (page - 1) * size}
