@@ -228,6 +228,110 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+  deploy-risk-summary:
+    name: Deployment Risk Summary (Bedrock)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 변경사항 + SonarCloud 이슈 기반 배포 위험도 분석 (Bedrock)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          pip install boto3 requests -q
+          python3 << 'EOF'
+          import boto3, json, requests, os, subprocess
+
+          sonar_token = os.environ['SONAR_TOKEN']
+          project_key = 'mzc-pj4_fiveline-backend'
+
+          resp = requests.get(
+              'https://sonarcloud.io/api/issues/search',
+              params={
+                  'componentKeys': project_key,
+                  'resolved': 'false',
+                  'ps': 20,
+                  'types': 'BUG,VULNERABILITY,CODE_SMELL',
+                  'directories': 'product-service'
+              },
+              auth=(sonar_token, '')
+          )
+          issues = resp.json().get('issues', [])
+
+          if not issues:
+              issue_text = "SonarCloud에서 발견된 미해결 이슈가 없습니다."
+          else:
+              lines = []
+              for i in issues[:10]:
+                  component = i.get('component', '').split(':')[-1]
+                  lines.append(f"- [{i.get('type')}] {i.get('message')} (심각도: {i.get('severity')}, 파일: {component})")
+              issue_text = '\n'.join(lines)
+
+          diff_stat = "(변경 파일 정보 없음)"
+          for base in [os.environ.get('BEFORE_SHA', ''), 'HEAD~1']:
+              if not base or base.startswith('0000000'):
+                  continue
+              result = subprocess.run(
+                  ['git', 'diff', '--stat', base, 'HEAD', '--', 'product-service'],
+                  capture_output=True, text=True
+              )
+              if result.returncode == 0 and result.stdout.strip():
+                  diff_stat = result.stdout
+                  break
+
+          commit_message = os.environ.get('COMMIT_MESSAGE', '(커밋 메시지 없음)')
+
+          bedrock = boto3.client('bedrock-runtime', region_name='ap-northeast-2')
+
+          prompt = f"""당신은 시니어 SRE입니다. 아래 정보를 바탕으로 이번 배포의 위험도를 평가해주세요.
+
+          커밋 메시지:
+          {commit_message}
+
+          변경된 파일:
+          {diff_stat}
+
+          SonarCloud 미해결 이슈 (product-service):
+          {issue_text}
+
+          다음 형식으로 한국어로 간결하게 답해주세요:
+          위험도: (낮음/중간/높음) 중 하나
+          이유: 1~2문장"""
+
+          body = json.dumps({
+              'anthropic_version': 'bedrock-2023-05-31',
+              'max_tokens': 512,
+              'messages': [{'role': 'user', 'content': prompt}]
+          })
+
+          response = bedrock.invoke_model(
+              modelId='anthropic.claude-3-haiku-20240307-v1:0',
+              body=body
+          )
+          analysis = json.loads(response['body'].read())['content'][0]['text']
+
+          slack_webhook = os.environ['SLACK_WEBHOOK_URL']
+          requests.post(slack_webhook, json={
+              'text': f"🤖 *product-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
+          })
+          print(analysis)
+          EOF
+
   trivy-scan:
     name: Trivy Image Scan
     runs-on: ubuntu-latest
