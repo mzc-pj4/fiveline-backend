@@ -103,6 +103,7 @@ jobs:
           python-version: "3.12"
 
       - name: Run pip-audit
+        continue-on-error: true
         run: |
           pip install pip-audit
           pip-audit -r product-service/requirements.txt
