@@ -37,4 +37,3 @@ app.include_router(users.router)
 @app.get("/")
 def root() -> dict[str, str]:
     return {"service": settings.service_name, "docs": "/docs"}
- 
