@@ -252,10 +252,10 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/user-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline/user-service:.*|fiveline/user-service:${IMAGE_TAG}|" user-service/user-service.yaml
+          sed -i "s|fiveline/user-service:.*|fiveline/user-service:${IMAGE_TAG}|" k8s/apps/base/user-service/deployment.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git add user-service/user-service.yaml
+          git add k8s/apps/base/user-service/deployment.yaml
           git commit -m "chore: update user-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
           gh pr create \

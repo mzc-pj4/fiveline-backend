@@ -268,10 +268,10 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/product-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline/product-service:.*|fiveline/product-service:${IMAGE_TAG}|" product-service/product-service.yaml
+          sed -i "s|fiveline/product-service:.*|fiveline/product-service:${IMAGE_TAG}|" k8s/apps/base/product-service/deployment.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git add product-service/product-service.yaml
+          git add k8s/apps/base/product-service/deployment.yaml
           git commit -m "chore: update product-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
           gh pr create \
