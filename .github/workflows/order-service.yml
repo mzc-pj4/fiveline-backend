@@ -379,13 +379,13 @@ jobs:
           git add k8s/apps/base/order-service/rollout.yaml
           git commit -m "chore: update order-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
-          gh pr create \
+          PR_URL=$(gh pr create \
             --repo mzc-pj4/fiveline_k8s_manifest \
             --title "chore: update order-service image tag to ${IMAGE_TAG}" \
-            --body "자동 생성된 PR입니다.\n\n서비스: order-service\n이미지 태그: ${IMAGE_TAG}\n실행자: ${{ github.actor }}" \
+            --body "$(printf '자동 생성된 PR입니다.\n\n서비스: order-service\n이미지 태그: %s\n실행자: ${{ github.actor }}' "${IMAGE_TAG}")" \
             --base main \
-            --head $BRANCH
-          gh pr merge --auto --squash \
+            --head $BRANCH)
+          gh pr merge --squash --yes \
             --repo mzc-pj4/fiveline_k8s_manifest \
             $BRANCH
 
