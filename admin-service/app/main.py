@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import auth, dashboard, health
+from app.routes import auth, dashboard, health, aiops
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -31,6 +31,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
+app.include_router(aiops.router)
 
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")

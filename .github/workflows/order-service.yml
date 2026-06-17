@@ -409,6 +409,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
+          AIOPS_TABLE: fiveline-dev-aiops-canary-logs
         run: |
           pip install boto3 requests -q
           python3 << 'EOF'
@@ -467,6 +468,35 @@ jobs:
               body=body
           )
           analysis = json.loads(response['body'].read())['content'][0]['text']
+
+          lines = {l.split(':')[0].strip(): ':'.join(l.split(':')[1:]).strip() for l in analysis.splitlines() if ':' in l}
+          ai_status = lines.get('상태', '알수없음')
+          ai_recommendation = lines.get('판단', '알수없음')
+          ai_reason = lines.get('이유', analysis)
+
+          image_tag = os.environ['IMAGE_TAG']
+          deployed_at = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+          ttl = int((now + timedelta(days=30)).timestamp())
+
+          dynamodb = boto3.client('dynamodb', region_name='ap-northeast-2')
+          dynamodb.put_item(
+              TableName=os.environ['AIOPS_TABLE'],
+              Item={
+                  'service_name': {'S': 'order-service'},
+                  'deployed_at': {'S': deployed_at},
+                  'image_tag': {'S': image_tag},
+                  'total_requests': {'N': str(int(total_requests))},
+                  'error_count': {'N': str(int(error_count))},
+                  'error_rate': {'N': f'{error_rate:.2f}'},
+                  'p99_latency_ms': {'N': str(int(p99_latency))},
+                  'ai_status': {'S': ai_status},
+                  'ai_recommendation': {'S': ai_recommendation},
+                  'ai_reason': {'S': ai_reason},
+                  'ttl': {'N': str(ttl)},
+              }
+          )
+          print(f'DynamoDB 저장 완료: {deployed_at}')
+
 
           emoji = '🟢' if '정상' in analysis else ('🔴' if '위험' in analysis else '🟡')
           requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
