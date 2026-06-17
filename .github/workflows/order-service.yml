@@ -497,6 +497,7 @@ jobs:
           )
           print(f'DynamoDB 저장 완료: {deployed_at}')
 
+
           emoji = '🟢' if '정상' in analysis else ('🔴' if '위험' in analysis else '🟡')
           requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
               'text': f"""{emoji} *order-service 카나리 AIOps 분석 (Bedrock)*
