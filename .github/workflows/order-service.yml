@@ -439,9 +439,21 @@ jobs:
               )
               return r['Datapoints'][0][stat] if r['Datapoints'] else 0
 
+          def get_percentile(metric_name, pct):
+              r = cw.get_metric_statistics(
+                  Namespace='AWS/ApplicationELB',
+                  MetricName=metric_name,
+                  Dimensions=dims,
+                  StartTime=start,
+                  EndTime=now,
+                  Period=300,
+                  ExtendedStatistics=[pct]
+              )
+              return r['Datapoints'][0]['ExtendedStatistics'][pct] if r['Datapoints'] else 0
+
           error_count = get_metric('HTTPCode_Target_5XX_Count', 'Sum')
           total_requests = get_metric('RequestCount', 'Sum')
-          p99_latency = get_metric('TargetResponseTime', 'p99') * 1000
+          p99_latency = get_percentile('TargetResponseTime', 'p99') * 1000
 
           error_rate = (error_count / total_requests * 100) if total_requests > 0 else 0
 
