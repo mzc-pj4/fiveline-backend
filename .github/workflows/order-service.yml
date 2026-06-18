@@ -469,6 +469,7 @@ jobs:
       - name: Analyze canary metrics with Bedrock
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PAGERDUTY_ROUTING_KEY: ${{ secrets.PAGERDUTY_ROUTING_KEY }}
           IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
           AIOPS_TABLE: fiveline-dev-aiops-canary-logs
           RISK_LEVEL: ${{ needs.deploy-risk-summary.outputs.risk_level }}
@@ -608,6 +609,33 @@ jobs:
           🤖 AI 분석:
           {analysis}"""
           })
+
+          if ai_recommendation == "롤백권고" or ai_status == "위험":
+              pd_key = os.environ.get('PAGERDUTY_ROUTING_KEY', '')
+              if pd_key:
+                  pd_resp = requests.post("https://events.pagerduty.com/v2/enqueue", json={
+                      "routing_key": pd_key,
+                      "event_action": "trigger",
+                      "payload": {
+                          "summary": f"[order-service] 카나리 롤백 권고 - {image_tag}",
+                          "severity": "critical",
+                          "source": "AIOps GitHub Actions",
+                          "custom_details": {
+                              "image_tag": image_tag,
+                              "error_5xx_rate": f"{error_5xx_rate:.2f}%",
+                              "error_4xx_rate": f"{error_4xx_rate:.2f}%",
+                              "p99_latency_ms": f"{p99_latency:.0f}ms",
+                              "total_requests": int(total_requests),
+                              "risk_level": risk_level,
+                              "trivy_critical": trivy_critical,
+                              "ai_status": ai_status,
+                              "ai_recommendation": ai_recommendation,
+                              "ai_reason": ai_reason,
+                          }
+                      }
+                  })
+                  print(f"PagerDuty 온콜 알림 발송: {pd_resp.status_code}")
+
           print(analysis)
           EOF
 
