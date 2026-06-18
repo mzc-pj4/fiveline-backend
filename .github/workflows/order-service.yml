@@ -346,10 +346,10 @@ jobs:
                   f.write(f'risk_level={risk_level}\n')
                   f.write(f'risk_reason={risk_reason}\n')
 
-          slack_webhook = os.environ['SLACK_WEBHOOK_URL']
-          requests.post(slack_webhook, json={
-              'text': f"🤖 *order-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
-          })
+          # 알림 비활성화 (복구하려면 아래 주석 해제)
+          # requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
+          #     'text': f"🤖 *order-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
+          # })
           print(analysis)
           EOF
 
@@ -597,18 +597,11 @@ jobs:
           )
           print(f'DynamoDB 저장 완료: {deployed_at}')
 
-          emoji = '🟢' if '정상' in analysis else ('🔴' if '위험' in analysis else '🟡')
-          requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
-              'text': f"""{emoji} *order-service 카나리 AIOps 분석 (Bedrock)*
-          📊 메트릭 (배포 후 5분)
-          • 5xx 에러율: {error_5xx_rate:.2f}% ({error_5xx_count:.0f}건)
-          • 4xx 에러율: {error_4xx_rate:.2f}% ({error_4xx_count:.0f}건)
-          • P99 응답시간: {p99_latency:.0f}ms
-          🛡️ 보안: CRITICAL {trivy_critical} / HIGH {trivy_high} / MEDIUM {trivy_medium}
-          ⚠️ 배포 위험도: {risk_level}
-          🤖 AI 분석:
-          {analysis}"""
-          })
+          # 알림 비활성화 (복구하려면 아래 주석 해제)
+          # emoji = '🟢' if '정상' in analysis else ('🔴' if '위험' in analysis else '🟡')
+          # requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
+          #     'text': f"{emoji} *order-service 카나리 AIOps 분석*\n{analysis}"
+          # })
           print(analysis)
           EOF
 
@@ -616,7 +609,7 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     needs: update-manifest
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false
 
     steps:
       - name: Slack 알림
