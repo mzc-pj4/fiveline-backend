@@ -42,7 +42,7 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     needs: test
-    if: false
+    if: true
     continue-on-error: true
 
     steps:
@@ -234,6 +234,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      risk_level: ${{ steps.analyze.outputs.risk_level }}
+      risk_reason: ${{ steps.analyze.outputs.risk_reason }}
 
     steps:
       - name: Checkout code
@@ -248,9 +251,9 @@ jobs:
           aws-region: ap-northeast-2
 
       - name: 변경사항 + SonarCloud 이슈 기반 배포 위험도 분석 (Bedrock)
+        id: analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
@@ -326,6 +329,21 @@ jobs:
           )
           analysis = json.loads(response['body'].read())['content'][0]['text']
 
+          risk_level = '알수없음'
+          risk_reason = ''
+          for line in analysis.splitlines():
+              line = line.strip()
+              if line.startswith('위험도:'):
+                  risk_level = line.split(':', 1)[1].strip()
+              elif line.startswith('이유:'):
+                  risk_reason = line.split(':', 1)[1].strip()
+
+          github_output = os.environ.get('GITHUB_OUTPUT', '')
+          if github_output:
+              with open(github_output, 'a') as f:
+                  f.write(f'risk_level={risk_level}\n')
+                  f.write(f'risk_reason={risk_reason}\n')
+
           # 알림 비활성화 (복구하려면 아래 주석 해제)
           # requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
           #     'text': f"🤖 *product-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
@@ -338,6 +356,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     continue-on-error: true
+    outputs:
+      critical: ${{ steps.trivy-parse.outputs.critical }}
+      high: ${{ steps.trivy-parse.outputs.high }}
+      medium: ${{ steps.trivy-parse.outputs.medium }}
+      low: ${{ steps.trivy-parse.outputs.low }}
 
     steps:
       - name: Configure AWS credentials (OIDC)
@@ -358,6 +381,43 @@ jobs:
           exit-code: 1
           ignore-unfixed: true
 
+      - name: Run Trivy (JSON for metrics)
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:dev-${{ github.run_number }}-${{ github.sha }}
+          format: json
+          output: trivy-results.json
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          exit-code: 0
+          ignore-unfixed: true
+
+      - name: Parse Trivy results
+        if: always()
+        id: trivy-parse
+        run: |
+          python3 << 'EOF'
+          import json, os
+          try:
+              with open('trivy-results.json') as f:
+                  data = json.load(f)
+              counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+              for r in data.get('Results', []):
+                  for v in r.get('Vulnerabilities', []) or []:
+                      sev = v.get('Severity', '')
+                      if sev in counts:
+                          counts[sev] += 1
+          except Exception as e:
+              print(f'trivy parse error: {e}')
+              counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"critical={counts['CRITICAL']}\n")
+              f.write(f"high={counts['HIGH']}\n")
+              f.write(f"medium={counts['MEDIUM']}\n")
+              f.write(f"low={counts['LOW']}\n")
+          print(counts)
+          EOF
+
   update-manifest:
     name: Update Manifest Repo
     runs-on: ubuntu-latest
@@ -374,10 +434,10 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/product-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline/product-service:.*|fiveline/product-service:${IMAGE_TAG}|" k8s/apps/base/product-service/deployment.yaml
+          sed -i "s|fiveline/product-service:.*|fiveline/product-service:${IMAGE_TAG}|" k8s/apps/base/product-service/rollout.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git add k8s/apps/base/product-service/deployment.yaml
+          git add k8s/apps/base/product-service/rollout.yaml
           git commit -m "chore: update product-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
           gh pr create \
@@ -386,9 +446,156 @@ jobs:
             --body "자동 생성된 PR입니다.\n\n서비스: product-service\n이미지 태그: ${IMAGE_TAG}\n실행자: ${{ github.actor }}" \
             --base main \
             --head $BRANCH
-          gh pr merge --auto --squash \
+          gh pr merge --squash \
             --repo mzc-pj4/fiveline_k8s_manifest \
             $BRANCH
+
+  post-canary-analysis:
+    name: Post-Canary AIOps Analysis (Bedrock)
+    runs-on: ubuntu-latest
+    needs: [update-manifest, deploy-risk-summary, trivy-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Wait for canary to stabilize
+        run: sleep 300
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Analyze canary metrics with Bedrock
+        env:
+          IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
+          AIOPS_TABLE: fiveline-dev-aiops-canary-logs
+          RISK_LEVEL: ${{ needs.deploy-risk-summary.outputs.risk_level }}
+          RISK_REASON: ${{ needs.deploy-risk-summary.outputs.risk_reason }}
+          TRIVY_CRITICAL: ${{ needs.trivy-scan.outputs.critical }}
+          TRIVY_HIGH: ${{ needs.trivy-scan.outputs.high }}
+          TRIVY_MEDIUM: ${{ needs.trivy-scan.outputs.medium }}
+          TRIVY_LOW: ${{ needs.trivy-scan.outputs.low }}
+        run: |
+          pip install boto3 requests -q
+          python3 << 'EOF'
+          import boto3, json, requests, os
+          from datetime import datetime, timedelta
+
+          cw = boto3.client('cloudwatch', region_name='ap-northeast-2')
+          elbv2 = boto3.client('elbv2', region_name='ap-northeast-2')
+
+          albs = elbv2.describe_load_balancers(Names=['fiveline-alb'])
+          alb_arn = albs['LoadBalancers'][0]['LoadBalancerArn']
+          alb_suffix = '/'.join(alb_arn.split('/')[-3:])
+
+          now = datetime.utcnow()
+          start = now - timedelta(minutes=5)
+          dims = [{'Name': 'LoadBalancer', 'Value': alb_suffix}]
+
+          def get_metric(metric_name, stat):
+              r = cw.get_metric_statistics(
+                  Namespace='AWS/ApplicationELB',
+                  MetricName=metric_name,
+                  Dimensions=dims,
+                  StartTime=start,
+                  EndTime=now,
+                  Period=300,
+                  Statistics=[stat]
+              )
+              return r['Datapoints'][0][stat] if r['Datapoints'] else 0
+
+          def get_percentile(metric_name, pct):
+              r = cw.get_metric_statistics(
+                  Namespace='AWS/ApplicationELB',
+                  MetricName=metric_name,
+                  Dimensions=dims,
+                  StartTime=start,
+                  EndTime=now,
+                  Period=300,
+                  ExtendedStatistics=[pct]
+              )
+              return r['Datapoints'][0]['ExtendedStatistics'][pct] if r['Datapoints'] else 0
+
+          error_5xx_count = get_metric('HTTPCode_Target_5XX_Count', 'Sum')
+          error_4xx_count = get_metric('HTTPCode_Target_4XX_Count', 'Sum')
+          total_requests = get_metric('RequestCount', 'Sum')
+          p99_latency = get_percentile('TargetResponseTime', 'p99') * 1000
+
+          error_5xx_rate = (error_5xx_count / total_requests * 100) if total_requests > 0 else 0
+          error_4xx_rate = (error_4xx_count / total_requests * 100) if total_requests > 0 else 0
+
+          risk_level = os.environ.get('RISK_LEVEL', '알수없음')
+          risk_reason = os.environ.get('RISK_REASON', '')
+          trivy_critical = int(os.environ.get('TRIVY_CRITICAL', '0') or '0')
+          trivy_high = int(os.environ.get('TRIVY_HIGH', '0') or '0')
+          trivy_medium = int(os.environ.get('TRIVY_MEDIUM', '0') or '0')
+          trivy_low = int(os.environ.get('TRIVY_LOW', '0') or '0')
+
+          bedrock = boto3.client('bedrock-runtime', region_name='ap-northeast-2')
+          prompt = f"""카나리 배포(product-service) 후 5분간 ALB 메트릭:
+          - 이미지 태그: {os.environ['IMAGE_TAG']}
+          - 총 요청 수: {total_requests:.0f}건
+          - 5xx 에러 수: {error_5xx_count:.0f}건 (에러율: {error_5xx_rate:.2f}%)
+          - 4xx 에러 수: {error_4xx_count:.0f}건 (에러율: {error_4xx_rate:.2f}%)
+          - P99 응답시간: {p99_latency:.0f}ms
+          - 배포 위험도: {risk_level}
+          - 이미지 취약점: CRITICAL {trivy_critical}, HIGH {trivy_high}, MEDIUM {trivy_medium}
+
+          카나리 트래픽 계속 확대할지 롤백할지 판단해줘.
+          형식:
+          상태: (정상/경고/위험)
+          판단: 계속진행 또는 롤백권고
+          이유: 1문장"""
+
+          body = json.dumps({
+              'anthropic_version': 'bedrock-2023-05-31',
+              'max_tokens': 256,
+              'messages': [{'role': 'user', 'content': prompt}]
+          })
+          response = bedrock.invoke_model(
+              modelId='anthropic.claude-3-haiku-20240307-v1:0',
+              body=body
+          )
+          analysis = json.loads(response['body'].read())['content'][0]['text']
+
+          lines = {l.split(':')[0].strip(): ':'.join(l.split(':')[1:]).strip() for l in analysis.splitlines() if ':' in l}
+          ai_status = lines.get('상태', '알수없음')
+          ai_recommendation = lines.get('판단', '알수없음')
+          ai_reason = lines.get('이유', analysis)
+
+          image_tag = os.environ['IMAGE_TAG']
+          deployed_at = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+          ttl = int((now + timedelta(days=30)).timestamp())
+
+          dynamodb = boto3.client('dynamodb', region_name='ap-northeast-2')
+          dynamodb.put_item(
+              TableName=os.environ['AIOPS_TABLE'],
+              Item={
+                  'service_name': {'S': 'product-service'},
+                  'deployed_at': {'S': deployed_at},
+                  'image_tag': {'S': image_tag},
+                  'total_requests': {'N': str(int(total_requests))},
+                  'error_count': {'N': str(int(error_5xx_count))},
+                  'error_rate': {'N': f'{error_5xx_rate:.2f}'},
+                  'error_4xx_count': {'N': str(int(error_4xx_count))},
+                  'error_4xx_rate': {'N': f'{error_4xx_rate:.2f}'},
+                  'p99_latency_ms': {'N': str(int(p99_latency))},
+                  'risk_level': {'S': risk_level},
+                  'risk_reason': {'S': risk_reason},
+                  'trivy_critical': {'N': str(trivy_critical)},
+                  'trivy_high': {'N': str(trivy_high)},
+                  'trivy_medium': {'N': str(trivy_medium)},
+                  'trivy_low': {'N': str(trivy_low)},
+                  'ai_status': {'S': ai_status},
+                  'ai_recommendation': {'S': ai_recommendation},
+                  'ai_reason': {'S': ai_reason},
+                  'ttl': {'N': str(ttl)},
+              }
+          )
+          print(f'DynamoDB 저장 완료: {deployed_at}')
+          print(analysis)
+          EOF
 
   notify:
     name: Notify
