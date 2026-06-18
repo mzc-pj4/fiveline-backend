@@ -310,10 +310,10 @@ jobs:
           )
           analysis = json.loads(response['body'].read())['content'][0]['text']
 
-          slack_webhook = os.environ['SLACK_WEBHOOK_URL']
-          requests.post(slack_webhook, json={
-              'text': f"🤖 *user-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
-          })
+          # 알림 비활성화 (복구하려면 아래 주석 해제)
+          # requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
+          #     'text': f"🤖 *user-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
+          # })
           print(analysis)
           EOF
 
@@ -378,7 +378,7 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     needs: update-manifest
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false
 
     steps:
       - name: Slack 알림
