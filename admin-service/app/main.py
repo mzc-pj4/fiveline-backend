@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.routes import auth, dashboard, health, aiops
@@ -32,6 +33,20 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(aiops.router)
+
+
+@app.get("/sonar-api/{path:path}")
+async def sonar_proxy(path: str, request: Request):
+    params = dict(request.query_params)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"https://sonarcloud.io/api/{path}",
+            params=params,
+            headers={"Authorization": request.headers.get("Authorization", "")},
+        )
+    return Response(content=resp.content, status_code=resp.status_code,
+                    media_type=resp.headers.get("content-type"))
+
 
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
