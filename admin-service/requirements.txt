@@ -78,3 +78,5 @@ websockets==16.0
     # via uvicorn
 boto3>=1.28
     # via admin-service (pyproject.toml)
+kubernetes>=29.0.0
+    # via admin-service (pyproject.toml)

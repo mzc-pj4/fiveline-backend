@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import auth, dashboard, health, aiops
+from app.routes import auth, dashboard, health, aiops, cicd
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -33,6 +33,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(aiops.router)
+app.include_router(cicd.router)
 
 
 @app.get("/sonar-api/{path:path}")
