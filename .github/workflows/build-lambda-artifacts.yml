@@ -1,0 +1,57 @@
+name: Build and Upload Lambda Artifacts
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'lambda/**'
+      - 'glue-scripts/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Get artifact bucket name from SSM
+        id: bucket
+        run: |
+          BUCKET=$(aws ssm get-parameter \
+            --name /fiveline/cicd/artifacts-bucket \
+            --query Parameter.Value \
+            --output text)
+          echo "name=$BUCKET" >> $GITHUB_OUTPUT
+
+      - name: Build and upload Lambda zips
+        run: |
+          for category in ai data-pipeline observability; do
+            for func_dir in lambda/$category/*/; do
+              [ -d "$func_dir" ] || continue
+              func=$(basename "$func_dir")
+              zip_name="${func}.zip"
+              cd "$func_dir"
+              zip -r "../../../${zip_name}" . -x "*.pyc" -x "__pycache__/*"
+              cd ../../..
+              aws s3 cp "${zip_name}" "s3://${{ steps.bucket.outputs.name }}/lambda/${category}/${func}.zip"
+              rm "${zip_name}"
+              echo "Uploaded: lambda/${category}/${func}.zip"
+            done
+          done
+
+      - name: Upload Glue scripts
+        run: |
+          aws s3 sync glue-scripts/ "s3://${{ steps.bucket.outputs.name }}/glue/" \
+            --delete \
+            --exclude "*.pyc"
+          echo "Glue scripts synced"
