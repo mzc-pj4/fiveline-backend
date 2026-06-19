@@ -1,6 +1,10 @@
+import json
+import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import boto3
+from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -9,6 +13,24 @@ from app.db.session import get_db
 from app.deps import CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+_REGION = "ap-northeast-2"
+
+
+@router.get("/ops-data")
+def get_ops_data(_: Annotated[CurrentUser, Depends(require_admin)]):
+    bucket = os.environ.get("DASHBOARD_BUCKET", "")
+    if not bucket:
+        raise HTTPException(status_code=503, detail="DASHBOARD_BUCKET not configured")
+    try:
+        s3 = boto3.client("s3", region_name=_REGION)
+        obj = s3.get_object(Bucket=bucket, Key="data.json")
+        return json.loads(obj["Body"].read())
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("NoSuchKey", "NoSuchBucket"):
+            raise HTTPException(status_code=404, detail="데이터가 아직 준비되지 않았습니다")
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/dashboard")
