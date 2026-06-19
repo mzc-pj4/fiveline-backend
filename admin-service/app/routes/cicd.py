@@ -101,7 +101,6 @@ def rollout_status(
     current_step_index = status.get("currentStepIndex") or 0
     phase = status.get("phase", "Unknown")
 
-    # currentStepIndex 이전까지의 마지막 setWeight가 현재 비율
     current_weight = 0
     for step in steps[:current_step_index]:
         if "setWeight" in step:
