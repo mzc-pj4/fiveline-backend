@@ -24,9 +24,14 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      - name: Get artifact bucket name
+      - name: Get artifact bucket name from SSM
         id: bucket
-        run: echo "name=${{ secrets.ARTIFACTS_BUCKET }}" >> $GITHUB_OUTPUT
+        run: |
+          BUCKET=$(aws ssm get-parameter \
+            --name /fiveline/cicd/artifacts-bucket \
+            --query Parameter.Value \
+            --output text)
+          echo "name=$BUCKET" >> $GITHUB_OUTPUT
 
       - name: Build and upload Lambda zips
         run: |
