@@ -50,28 +50,27 @@ def rollout_action(
     _: Annotated[CurrentUser, Depends(require_admin)],
     body: RolloutActionRequest,
 ):
-    if body.action == "promote":
-        patch = {
-            "metadata": {
-                "annotations": {
-                    "argoproj.io/manual-gate-passed": "true"
-                }
-            }
-        }
-    elif body.action == "abort":
-        patch = {"spec": {"abort": True}}
-    else:
-        raise HTTPException(status_code=400, detail=f"지원하지 않는 액션: {body.action}")
-
     try:
-        _get_custom_api().patch_namespaced_custom_object(
-            group="argoproj.io",
-            version="v1alpha1",
-            namespace=NAMESPACE,
-            plural="rollouts",
-            name=body.service_name,
-            body=patch,
-        )
+        if body.action == "promote":
+            _get_custom_api().patch_namespaced_custom_object_status(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=NAMESPACE,
+                plural="rollouts",
+                name=body.service_name,
+                body={"status": {"pauseConditions": None, "controllerPause": False}},
+            )
+        elif body.action == "abort":
+            _get_custom_api().patch_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=NAMESPACE,
+                plural="rollouts",
+                name=body.service_name,
+                body={"spec": {"abort": True}},
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"지원하지 않는 액션: {body.action}")
     except ApiException as e:
         raise HTTPException(status_code=e.status, detail=e.reason)
 
