@@ -89,12 +89,20 @@ jobs:
       - name: Checkout backend
         uses: actions/checkout@v4
 
-      - name: Checkout frontend (admin-frontend build context)
+      - name: Checkout frontend
         uses: actions/checkout@v4
         with:
           repository: mzc-pj4/fiveline-frontend
           token: ${{ secrets.MANIFEST_REPO_TOKEN }}
           path: fiveline-frontend
+
+      - name: Build React frontend
+        run: |
+          cd fiveline-frontend/admin
+          npm ci
+          npm run build
+          mkdir -p ${{ github.workspace }}/admin-service/static
+          cp -r dist/* ${{ github.workspace }}/admin-service/static/
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -106,19 +114,16 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build and push Docker image
         env:
           IMAGE_TAG: dev-${{ github.run_number }}-${{ github.sha }}
         run: |
-          docker buildx build \
-            --build-context admin-frontend=./fiveline-frontend/admin \
+          docker build \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            --push \
             ./admin-service
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
   trivy-scan:
     name: Trivy Image Scan
