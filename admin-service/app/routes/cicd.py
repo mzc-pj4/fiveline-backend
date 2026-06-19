@@ -1,7 +1,10 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
+from statistics import quantiles
 from typing import Annotated
 
 import boto3
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from kubernetes import client, config
@@ -13,6 +16,11 @@ router = APIRouter(prefix="/api/admin/cicd", tags=["cicd"])
 
 NAMESPACE = "fiveline"
 REGION = "ap-northeast-2"
+SERVICE_PORT_MAP = {
+    "order-service": 8003,
+    "product-service": 8002,
+    "user-service": 8001,
+}
 
 
 def _load_k8s():
@@ -199,3 +207,41 @@ def realtime_metrics(
         raise
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/canary-probe")
+async def canary_probe(
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    service: str = Query("order-service"),
+    count: int = Query(20, ge=5, le=50),
+):
+    port = SERVICE_PORT_MAP.get(service, 8003)
+    url = f"http://{service}-canary.{NAMESPACE}.svc.cluster.local:{port}/api/health"
+
+    latencies: list[float] = []
+    errors = 0
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        responses = await asyncio.gather(
+            *[client.get(url) for _ in range(count)],
+            return_exceptions=True,
+        )
+
+    for r in responses:
+        if isinstance(r, Exception) or r.status_code >= 500:
+            errors += 1
+        else:
+            latencies.append(r.elapsed.total_seconds() * 1000)
+
+    p99 = int(quantiles(latencies, n=100)[98]) if len(latencies) >= 2 else (int(latencies[0]) if latencies else 0)
+    avg = int(sum(latencies) / len(latencies)) if latencies else 0
+
+    return {
+        "service": service,
+        "probe_count": count,
+        "error_count": errors,
+        "error_rate": round(errors / count * 100, 2),
+        "p99_latency_ms": p99,
+        "avg_latency_ms": avg,
+        "canary_only": True,
+    }
