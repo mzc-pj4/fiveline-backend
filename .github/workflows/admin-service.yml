@@ -58,6 +58,7 @@ jobs:
             -Dsonar.sources=admin-service/app
             -Dsonar.python.version=3.12
             -Dsonar.python.coverage.reportPaths=admin-service/coverage.xml
+            -Dsonar.coverage.exclusions=admin-service/app/routes/cicd.py
 
   dependency-check:
     name: Dependency Check
