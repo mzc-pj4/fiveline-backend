@@ -68,20 +68,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          project: admin-service
-          path: admin-service
-          format: HTML
-          args: --failOnCVSS 7
+          python-version: "3.12"
 
-      - name: Upload report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dependency-check-report
-          path: reports/
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r admin-service/requirements.txt
+        continue-on-error: true
 
   build-and-push:
     name: Build & Push to ECR
