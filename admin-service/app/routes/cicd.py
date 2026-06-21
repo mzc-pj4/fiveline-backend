@@ -146,7 +146,7 @@ def rollout_status(
     stable_image = ""
     canary_image = ""
 
-    if in_progress:
+    if in_progress or (phase == "Healthy" and stable_hash):
         try:
             rs_list = _get_apps_api().list_namespaced_replica_set(
                 namespace=NAMESPACE,
