@@ -52,13 +52,18 @@ def rollout_action(
 ):
     try:
         if body.action == "promote":
-            _get_custom_api().patch_namespaced_custom_object_status(
-                group="argoproj.io",
-                version="v1alpha1",
-                namespace=NAMESPACE,
-                plural="rollouts",
-                name=body.service_name,
+            _load_k8s()
+            api_client = client.ApiClient()
+            api_client.call_api(
+                f'/apis/argoproj.io/v1alpha1/namespaces/{NAMESPACE}/rollouts/{body.service_name}/status',
+                'PATCH',
+                header_params={
+                    'Content-Type': 'application/merge-patch+json',
+                    'Accept': 'application/json',
+                },
                 body={"status": {"pauseConditions": None, "controllerPause": False}},
+                auth_settings=['BearerToken'],
+                response_type='object',
             )
         elif body.action == "abort":
             _get_custom_api().patch_namespaced_custom_object(
