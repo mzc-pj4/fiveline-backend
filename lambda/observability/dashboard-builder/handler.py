@@ -43,13 +43,17 @@ def _to_json(obj):
 def get_summary_today():
     """오늘 데이터 없으면 최근 7일 중 가장 최신. 모니터링#3 테이블 값이 있으면 카드에 우선 표시."""
     base = {"found": False, "message": "최근 7일 내 데이터 없음"}
-    for delta in range(7):
-        date_str = (datetime.now(timezone.utc) - timedelta(days=delta)).strftime("%Y-%m-%d")
-        resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"summaryDate": date_str})
-        item = resp.get("Item")
-        if item:
-            base = _to_json(item)
-            break
+    try:
+        for delta in range(7):
+            date_str = (datetime.now(timezone.utc) - timedelta(days=delta)).strftime("%Y-%m-%d")
+            # 실제 배포 테이블 키 스키마: hash_key=service, range_key=date
+            resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"service": MONITORING_SVC, "date": date_str})
+            item = resp.get("Item")
+            if item:
+                base = _to_json(item)
+                break
+    except Exception as e:
+        base["_error"] = str(e)
 
     # 모니터링 #3의 dashboard_summary (service+date PK) merge
     mon = get_monitoring_summary()
