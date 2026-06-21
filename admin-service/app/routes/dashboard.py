@@ -1,6 +1,10 @@
+import json
+import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import boto3
+from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -9,6 +13,43 @@ from app.db.session import get_db
 from app.deps import CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+_REGION = os.environ.get("AWS_DEFAULT_REGION", "ap-northeast-2")
+
+
+def _get_aws_account_id() -> str:
+    try:
+        return boto3.client("sts", region_name=_REGION).get_caller_identity()["Account"]
+    except Exception:
+        return ""
+
+
+_ACCOUNT_ID = _get_aws_account_id()
+
+
+@router.get(
+    "/ops-data",
+    responses={
+        503: {"description": "DASHBOARD_BUCKET 미설정 또는 S3 오류"},
+        404: {"description": "데이터가 아직 준비되지 않았습니다"},
+    },
+)
+def get_ops_data(_: Annotated[CurrentUser, Depends(require_admin)]):
+    bucket = os.environ.get("DASHBOARD_BUCKET", "")
+    if not bucket:
+        raise HTTPException(status_code=503, detail="DASHBOARD_BUCKET not configured")
+    try:
+        s3 = boto3.client("s3", region_name=_REGION)
+        get_kwargs: dict = {"Bucket": bucket, "Key": "data.json"}
+        if _ACCOUNT_ID:
+            get_kwargs["ExpectedBucketOwner"] = _ACCOUNT_ID
+        obj = s3.get_object(**get_kwargs)
+        return json.loads(obj["Body"].read())
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("NoSuchKey", "NoSuchBucket"):
+            raise HTTPException(status_code=404, detail="데이터가 아직 준비되지 않았습니다")
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/dashboard")
