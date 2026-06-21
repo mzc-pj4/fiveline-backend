@@ -22,6 +22,7 @@ K8S_API_HOST = "https://kubernetes.default.svc"
 def _k8s_token() -> str:
     return Path(K8S_TOKEN_PATH).read_text().strip()
 
+
 router = APIRouter(prefix="/api/admin/cicd", tags=["cicd"])
 
 NAMESPACE = "fiveline"
