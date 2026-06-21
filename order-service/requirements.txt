@@ -95,4 +95,8 @@ watchfiles==1.2.0
     # via uvicorn
 websockets==16.0
     # via uvicorn
+prometheus-client==0.21.1
+    # via prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator==6.1.0
+    # via order-service (pyproject.toml)
 

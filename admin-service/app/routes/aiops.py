@@ -51,5 +51,7 @@ def list_deployments(
             "ai_status": item.get("ai_status"),
             "ai_recommendation": item.get("ai_recommendation"),
             "ai_reason": item.get("ai_reason"),
+            "step_index": int(item["step_index"]) if item.get("step_index") else None,
+            "canary_weight": int(item["canary_weight"]) if item.get("canary_weight") else None,
         })
     return {"items": items, "total": len(items)}
