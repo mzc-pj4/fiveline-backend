@@ -466,6 +466,7 @@ jobs:
       TRIVY_HIGH: ${{ needs.trivy-scan.outputs.high }}
       TRIVY_MEDIUM: ${{ needs.trivy-scan.outputs.medium }}
       TRIVY_LOW: ${{ needs.trivy-scan.outputs.low }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Configure AWS credentials (OIDC)
@@ -475,7 +476,7 @@ jobs:
           aws-region: ap-northeast-2
 
       - name: Install dependencies
-        run: pip install boto3 -q
+        run: pip install boto3 requests -q
 
       - name: Create analysis script
         run: |
@@ -526,6 +527,34 @@ jobs:
           trivy_high = int(os.environ.get('TRIVY_HIGH', '0') or '0')
           trivy_medium = int(os.environ.get('TRIVY_MEDIUM', '0') or '0')
           trivy_low = int(os.environ.get('TRIVY_LOW', '0') or '0')
+
+          sonar_coverage = 0.0
+          sonar_bugs = 0
+          sonar_vulnerabilities = 0
+          sonar_code_smells = 0
+          sonar_quality_gate = 'UNKNOWN'
+          try:
+              sonar_token = os.environ.get('SONAR_TOKEN', '')
+              sonar_resp = requests.get(
+                  'https://sonarcloud.io/api/measures/component',
+                  params={
+                      'component': 'mzc-pj4_fiveline-backend',
+                      'metricKeys': 'coverage,bugs,vulnerabilities,code_smells,alert_status',
+                      'branch': 'main'
+                  },
+                  auth=(sonar_token, ''),
+                  timeout=10
+              )
+              if sonar_resp.status_code == 200:
+                  measures = {m['metric']: m.get('value', '0') for m in sonar_resp.json().get('component', {}).get('measures', [])}
+                  sonar_coverage = float(measures.get('coverage', '0') or '0')
+                  sonar_bugs = int(measures.get('bugs', '0') or '0')
+                  sonar_vulnerabilities = int(measures.get('vulnerabilities', '0') or '0')
+                  sonar_code_smells = int(measures.get('code_smells', '0') or '0')
+                  sonar_quality_gate = measures.get('alert_status', 'UNKNOWN')
+                  print(f'SonarCloud: coverage={sonar_coverage}%, bugs={sonar_bugs}, vuln={sonar_vulnerabilities}, smells={sonar_code_smells}, gate={sonar_quality_gate}')
+          except Exception as e:
+              print(f'SonarCloud fetch failed (non-critical): {e}')
 
           bedrock = boto3.client('bedrock-runtime', region_name='ap-northeast-2')
           prompt = f"""카나리 배포(order-service) 단계 {step_index}/3 - 현재 {canary_weight}% 트래픽 적용 중.
@@ -582,6 +611,11 @@ jobs:
                   'trivy_high': {'N': str(trivy_high)},
                   'trivy_medium': {'N': str(trivy_medium)},
                   'trivy_low': {'N': str(trivy_low)},
+                  'sonar_coverage': {'N': f'{sonar_coverage:.1f}'},
+                  'sonar_bugs': {'N': str(sonar_bugs)},
+                  'sonar_vulnerabilities': {'N': str(sonar_vulnerabilities)},
+                  'sonar_code_smells': {'N': str(sonar_code_smells)},
+                  'sonar_quality_gate': {'S': sonar_quality_gate},
                   'ai_status': {'S': ai_status},
                   'ai_recommendation': {'S': ai_recommendation},
                   'ai_reason': {'S': ai_reason},
