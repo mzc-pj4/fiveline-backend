@@ -1,5 +1,7 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from statistics import quantiles
 from typing import Annotated
 
@@ -11,6 +13,14 @@ from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 
 from app.deps import CurrentUser, require_admin
+
+K8S_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+K8S_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+K8S_API_HOST = "https://kubernetes.default.svc"
+
+
+def _k8s_token() -> str:
+    return Path(K8S_TOKEN_PATH).read_text().strip()
 
 router = APIRouter(prefix="/api/admin/cicd", tags=["cicd"])
 
@@ -50,22 +60,28 @@ def rollout_action(
     _: Annotated[CurrentUser, Depends(require_admin)],
     body: RolloutActionRequest,
 ):
-    try:
-        if body.action == "promote":
-            _load_k8s()
-            api_client = client.ApiClient()
-            api_client.call_api(
-                f'/apis/argoproj.io/v1alpha1/namespaces/{NAMESPACE}/rollouts/{body.service_name}/status',
-                'PATCH',
-                header_params={
-                    'Content-Type': 'application/merge-patch+json',
-                    'Accept': 'application/json',
+    if body.action == "promote":
+        url = (
+            f"{K8S_API_HOST}/apis/argoproj.io/v1alpha1"
+            f"/namespaces/{NAMESPACE}/rollouts/{body.service_name}/status"
+        )
+        with httpx.Client(verify=K8S_CA_PATH, timeout=10.0) as http:
+            resp = http.patch(
+                url,
+                headers={
+                    "Authorization": f"Bearer {_k8s_token()}",
+                    "Content-Type": "application/merge-patch+json",
+                    "Accept": "application/json",
                 },
-                body={"status": {"pauseConditions": None, "controllerPause": False}},
-                auth_settings=['BearerToken'],
-                response_type='object',
+                content=json.dumps(
+                    {"status": {"pauseConditions": None, "controllerPause": False}}
+                ),
             )
-        elif body.action == "abort":
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+    elif body.action == "abort":
+        try:
             _get_custom_api().patch_namespaced_custom_object(
                 group="argoproj.io",
                 version="v1alpha1",
@@ -74,10 +90,11 @@ def rollout_action(
                 name=body.service_name,
                 body={"spec": {"abort": True}},
             )
-        else:
-            raise HTTPException(status_code=400, detail=f"지원하지 않는 액션: {body.action}")
-    except ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
+        except ApiException as e:
+            raise HTTPException(status_code=e.status, detail=e.reason)
+
+    else:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 액션: {body.action}")
 
     return {"status": "ok", "action": body.action, "service": body.service_name}
 
