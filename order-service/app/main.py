@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -21,6 +22,8 @@ app = FastAPI(
     description="mzc-pj4 cart + orders + failure simulation",
     lifespan=lifespan,
 )
+
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 app.add_middleware(
     CORSMiddleware,
