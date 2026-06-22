@@ -1,9 +1,9 @@
 import os
 
-# Set AWS env vars at import time (before any fixture runs)
-# so module-level boto3 clients in Lambda handlers can initialize without error.
+# Set at import time (before any fixture) so module-level boto3 clients can
+# initialize without error. Using direct assignment to override any stale values.
 # These are dummy values — no real AWS calls are made during tests.
-os.environ.setdefault("AWS_DEFAULT_REGION", "ap-northeast-2")
-os.environ.setdefault("AWS_REGION", "ap-northeast-2")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
+os.environ["AWS_DEFAULT_REGION"] = "ap-northeast-2"
+os.environ["AWS_REGION"] = "ap-northeast-2"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
