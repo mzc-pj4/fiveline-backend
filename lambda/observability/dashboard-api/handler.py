@@ -18,6 +18,7 @@ CHECK_TABLE      = os.environ["CHECK_TABLE"]
 ATHENA_DB        = os.environ["ATHENA_DB"]
 ATHENA_OUTPUT    = os.environ["ATHENA_OUTPUT"]
 LANGGRAPH_LAMBDA = os.environ["LANGGRAPH_LAMBDA"]
+MONITORING_SVC   = os.environ.get("MONITORING_SERVICE_KEY", "ecommerce")
 
 ddb     = boto3.resource("dynamodb")
 athena  = boto3.client("athena")
@@ -52,8 +53,14 @@ def _response(status, body):
 # ── Endpoints ───────────────────────────────────────────────────────────────
 
 def get_summary(query_params):
+    """팀 통합: DASHBOARD_TABLE 이 dashboard_summary (service + date 복합 키) 와 통합됨."""
     date_str = (query_params or {}).get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"summaryDate": date_str})
+    try:
+        resp = ddb.Table(DASHBOARD_TABLE).get_item(
+            Key={"service": MONITORING_SVC, "date": date_str}
+        )
+    except Exception as e:
+        return _response(500, {"error": "DDB 조회 실패", "detail": str(e)})
     item = resp.get("Item")
     if not item:
         return _response(200, {"summaryDate": date_str, "found": False, "message": "해당 날짜 데이터 없음"})

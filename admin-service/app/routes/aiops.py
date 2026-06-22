@@ -51,5 +51,12 @@ def list_deployments(
             "ai_status": item.get("ai_status"),
             "ai_recommendation": item.get("ai_recommendation"),
             "ai_reason": item.get("ai_reason"),
+            "step_index": int(item["step_index"]) if item.get("step_index") else None,
+            "canary_weight": int(item["canary_weight"]) if item.get("canary_weight") else None,
+            "sonar_coverage": float(item["sonar_coverage"]) if item.get("sonar_coverage") is not None else None,
+            "sonar_bugs": int(item["sonar_bugs"]) if item.get("sonar_bugs") is not None else None,
+            "sonar_vulnerabilities": int(item["sonar_vulnerabilities"]) if item.get("sonar_vulnerabilities") is not None else None,
+            "sonar_code_smells": int(item["sonar_code_smells"]) if item.get("sonar_code_smells") is not None else None,
+            "sonar_quality_gate": item.get("sonar_quality_gate"),
         })
     return {"items": items, "total": len(items)}

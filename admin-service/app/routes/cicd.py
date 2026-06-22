@@ -1,7 +1,12 @@
+import asyncio
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from statistics import quantiles
 from typing import Annotated
 
 import boto3
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from kubernetes import client, config
@@ -9,10 +14,24 @@ from kubernetes.client.exceptions import ApiException
 
 from app.deps import CurrentUser, require_admin
 
+K8S_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+K8S_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+K8S_API_HOST = "https://kubernetes.default.svc"
+
+
+def _k8s_token() -> str:
+    return Path(K8S_TOKEN_PATH).read_text().strip()
+
+
 router = APIRouter(prefix="/api/admin/cicd", tags=["cicd"])
 
 NAMESPACE = "fiveline"
 REGION = "ap-northeast-2"
+SERVICE_PORT_MAP = {
+    "order-service": 8003,
+    "product-service": 8002,
+    "user-service": 8001,
+}
 
 
 def _load_k8s():
@@ -43,29 +62,51 @@ def rollout_action(
     body: RolloutActionRequest,
 ):
     if body.action == "promote":
-        patch = {
-            "metadata": {
-                "annotations": {
-                    "argoproj.io/manual-gate-passed": "true"
-                }
-            }
-        }
+        token = _k8s_token()
+        base_url = (
+            f"{K8S_API_HOST}/apis/argoproj.io/v1alpha1"
+            f"/namespaces/{NAMESPACE}/rollouts/{body.service_name}"
+        )
+        with httpx.Client(verify=K8S_CA_PATH, timeout=10.0) as http:
+            get_resp = http.get(
+                base_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+            if get_resp.status_code >= 400:
+                raise HTTPException(status_code=get_resp.status_code, detail=get_resp.text)
+
+            rollout = get_resp.json()
+            status = rollout.setdefault("status", {})
+            status.pop("pauseConditions", None)
+            status["controllerPause"] = False
+
+            put_resp = http.put(
+                f"{base_url}/status",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                content=json.dumps(rollout),
+            )
+        if put_resp.status_code >= 400:
+            raise HTTPException(status_code=put_resp.status_code, detail=put_resp.text)
+
     elif body.action == "abort":
-        patch = {"spec": {"abort": True}}
+        try:
+            _get_custom_api().patch_namespaced_custom_object(
+                group="argoproj.io",
+                version="v1alpha1",
+                namespace=NAMESPACE,
+                plural="rollouts",
+                name=body.service_name,
+                body={"spec": {"abort": True}},
+            )
+        except ApiException as e:
+            raise HTTPException(status_code=e.status, detail=e.reason)
+
     else:
         raise HTTPException(status_code=400, detail=f"지원하지 않는 액션: {body.action}")
-
-    try:
-        _get_custom_api().patch_namespaced_custom_object(
-            group="argoproj.io",
-            version="v1alpha1",
-            namespace=NAMESPACE,
-            plural="rollouts",
-            name=body.service_name,
-            body=patch,
-        )
-    except ApiException as e:
-        raise HTTPException(status_code=e.status, detail=e.reason)
 
     return {"status": "ok", "action": body.action, "service": body.service_name}
 
@@ -93,7 +134,6 @@ def rollout_status(
     current_step_index = status.get("currentStepIndex") or 0
     phase = status.get("phase", "Unknown")
 
-    # currentStepIndex 이전까지의 마지막 setWeight가 현재 비율
     current_weight = 0
     for step in steps[:current_step_index]:
         if "setWeight" in step:
@@ -106,7 +146,7 @@ def rollout_status(
     stable_image = ""
     canary_image = ""
 
-    if in_progress:
+    if in_progress or (phase == "Healthy" and stable_hash):
         try:
             rs_list = _get_apps_api().list_namespaced_replica_set(
                 namespace=NAMESPACE,
@@ -199,3 +239,41 @@ def realtime_metrics(
         raise
     except Exception as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/canary-probe")
+async def canary_probe(
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    service: str = Query("order-service"),
+    count: int = Query(20, ge=5, le=50),
+):
+    port = SERVICE_PORT_MAP.get(service, 8003)
+    url = f"http://{service}-canary.{NAMESPACE}.svc.cluster.local:{port}/api/health"
+
+    latencies: list[float] = []
+    errors = 0
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        responses = await asyncio.gather(
+            *[client.get(url) for _ in range(count)],
+            return_exceptions=True,
+        )
+
+    for r in responses:
+        if isinstance(r, Exception) or r.status_code >= 500:
+            errors += 1
+        else:
+            latencies.append(r.elapsed.total_seconds() * 1000)
+
+    p99 = int(quantiles(latencies, n=100)[98]) if len(latencies) >= 2 else (int(latencies[0]) if latencies else 0)
+    avg = int(sum(latencies) / len(latencies)) if latencies else 0
+
+    return {
+        "service": service,
+        "probe_count": count,
+        "error_count": errors,
+        "error_rate": round(errors / count * 100, 2),
+        "p99_latency_ms": p99,
+        "avg_latency_ms": avg,
+        "canary_only": True,
+    }

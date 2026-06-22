@@ -17,6 +17,7 @@ CHECK_TABLE     = os.environ["CHECK_TABLE"]
 ALARM_TABLE     = os.environ.get("ALARM_TABLE", "")
 ATHENA_DB       = os.environ["ATHENA_DB"]
 ATHENA_OUTPUT   = os.environ["ATHENA_OUTPUT"]
+MONITORING_SVC  = os.environ.get("MONITORING_SERVICE_KEY", "ecommerce")
 
 ddb    = boto3.resource("dynamodb")
 athena = boto3.client("athena")
@@ -39,8 +40,14 @@ def _get_param(params, name, default=None):
 # ── Actions ─────────────────────────────────────────────────────────────────
 
 def get_dashboard_summary(params):
+    """팀 통합: DASHBOARD_TABLE 이 service + date 복합 키 사용."""
     date_str = _get_param(params, "date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"summaryDate": date_str})
+    try:
+        resp = ddb.Table(DASHBOARD_TABLE).get_item(
+            Key={"service": MONITORING_SVC, "date": date_str}
+        )
+    except Exception as e:
+        return {"summaryDate": date_str, "found": False, "error": str(e)}
     item = resp.get("Item")
     if not item:
         return {"summaryDate": date_str, "found": False, "message": "해당 날짜 데이터 없음"}
