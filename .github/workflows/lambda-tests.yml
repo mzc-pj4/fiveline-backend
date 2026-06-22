@@ -37,6 +37,7 @@ jobs:
         id: pytest
         env:
           AWS_DEFAULT_REGION: ap-northeast-2
+          AWS_REGION: ap-northeast-2
           AWS_ACCESS_KEY_ID: testing
           AWS_SECRET_ACCESS_KEY: testing
         run: |
