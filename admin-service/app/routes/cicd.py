@@ -111,6 +111,48 @@ def rollout_action(
     return {"status": "ok", "action": body.action, "service": body.service_name}
 
 
+def _classify_step(step: dict, pause_conditions: list) -> dict:
+    if "setWeight" in step:
+        return {"type": "setWeight", "weight": step["setWeight"]}
+    if "pause" in step:
+        duration = step["pause"].get("duration") if step["pause"] else None
+        if duration:
+            return {"type": "pause_auto", "duration": str(duration)}
+        return {"type": "pause_manual"}
+    if "analysis" in step:
+        return {"type": "analysis"}
+    return {"type": "unknown"}
+
+
+def _get_analysis_runs(service: str, canary_hash: str) -> list:
+    try:
+        runs = _get_custom_api().list_namespaced_custom_object(
+            group="argoproj.io", version="v1alpha1",
+            namespace=NAMESPACE, plural="analysisruns",
+            label_selector=f"rollouts-pod-template-hash={canary_hash}",
+        )
+        result = []
+        for r in runs.get("items", []):
+            meta = r.get("metadata", {})
+            status = r.get("status", {})
+            metrics = status.get("metricResults", [])
+            successful = sum(m.get("successful", 0) for m in metrics)
+            failed = sum(m.get("failed", 0) for m in metrics)
+            error = sum(m.get("error", 0) for m in metrics)
+            result.append({
+                "name": meta.get("name", ""),
+                "phase": status.get("phase", "Unknown"),
+                "successful": successful,
+                "failed": failed,
+                "error": error,
+                "started_at": meta.get("creationTimestamp"),
+            })
+        result.sort(key=lambda x: x["started_at"] or "")
+        return result
+    except Exception:
+        return []
+
+
 @router.get("/rollout-status")
 def rollout_status(
     _: Annotated[CurrentUser, Depends(require_admin)],
@@ -133,6 +175,7 @@ def rollout_status(
     steps = spec.get("strategy", {}).get("canary", {}).get("steps", [])
     current_step_index = status.get("currentStepIndex") or 0
     phase = status.get("phase", "Unknown")
+    pause_conditions = status.get("pauseConditions") or []
 
     current_weight = 0
     for step in steps[:current_step_index]:
@@ -164,15 +207,30 @@ def rollout_status(
         except Exception:
             pass
 
+    steps_info = [_classify_step(s, pause_conditions) for s in steps]
+
+    current_step_info = steps_info[current_step_index] if current_step_index < len(steps_info) else None
+    is_manual_pause = (
+        bool(pause_conditions)
+        and current_step_info is not None
+        and current_step_info.get("type") == "pause_manual"
+    )
+
+    analysis_runs = _get_analysis_runs(service, canary_hash) if in_progress else []
+
     return {
         "phase": phase,
         "in_progress": in_progress,
         "current_step_index": current_step_index,
         "steps_total": len(steps),
         "current_weight": current_weight,
-        "paused": bool(status.get("pauseConditions")),
+        "paused": bool(pause_conditions),
+        "is_manual_pause": is_manual_pause,
         "stable_image": stable_image,
         "canary_image": canary_image,
+        "steps_info": steps_info,
+        "current_step_info": current_step_info,
+        "analysis_runs": analysis_runs,
     }
 
 

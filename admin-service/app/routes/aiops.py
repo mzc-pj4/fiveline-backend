@@ -53,5 +53,54 @@ def list_deployments(
             "ai_reason": item.get("ai_reason"),
             "step_index": int(item["step_index"]) if item.get("step_index") else None,
             "canary_weight": int(item["canary_weight"]) if item.get("canary_weight") else None,
+            "sonar_coverage": float(item["sonar_coverage"]) if item.get("sonar_coverage") is not None else None,
+            "sonar_bugs": int(item["sonar_bugs"]) if item.get("sonar_bugs") is not None else None,
+            "sonar_vulnerabilities": int(item["sonar_vulnerabilities"]) if item.get("sonar_vulnerabilities") is not None else None,
+            "sonar_code_smells": int(item["sonar_code_smells"]) if item.get("sonar_code_smells") is not None else None,
+            "sonar_quality_gate": item.get("sonar_quality_gate"),
         })
     return {"items": items, "total": len(items)}
+
+
+@router.get("/live")
+def live_analysis(
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    service: str = "order-service",
+    image_tag: str = "",
+):
+    table = _get_table()
+    resp = table.query(
+        KeyConditionExpression=Key("service_name").eq(service),
+        ScanIndexForward=False,
+        Limit=10,
+    )
+    items = []
+    for item in resp.get("Items", []):
+        if image_tag and item.get("image_tag", "") != image_tag:
+            continue
+        items.append({
+            "service_name": item.get("service_name"),
+            "deployed_at": item.get("deployed_at"),
+            "image_tag": item.get("image_tag"),
+            "step_index": int(item["step_index"]) if item.get("step_index") else None,
+            "canary_weight": int(item["canary_weight"]) if item.get("canary_weight") else None,
+            "total_requests": int(item.get("total_requests", 0)),
+            "error_rate": float(item.get("error_rate", 0)),
+            "error_4xx_rate": float(item.get("error_4xx_rate", 0)),
+            "p99_latency_ms": int(item.get("p99_latency_ms", 0)),
+            "risk_level": item.get("risk_level", ""),
+            "trivy_critical": int(item.get("trivy_critical", 0)),
+            "trivy_high": int(item.get("trivy_high", 0)),
+            "trivy_medium": int(item.get("trivy_medium", 0)),
+            "trivy_low": int(item.get("trivy_low", 0)),
+            "sonar_coverage": float(item["sonar_coverage"]) if item.get("sonar_coverage") is not None else None,
+            "sonar_bugs": int(item["sonar_bugs"]) if item.get("sonar_bugs") is not None else None,
+            "sonar_vulnerabilities": int(item["sonar_vulnerabilities"]) if item.get("sonar_vulnerabilities") is not None else None,
+            "sonar_code_smells": int(item["sonar_code_smells"]) if item.get("sonar_code_smells") is not None else None,
+            "sonar_quality_gate": item.get("sonar_quality_gate"),
+            "ai_status": item.get("ai_status"),
+            "ai_recommendation": item.get("ai_recommendation"),
+            "ai_reason": item.get("ai_reason"),
+        })
+    items.sort(key=lambda x: x.get("step_index") or 0)
+    return {"items": items}

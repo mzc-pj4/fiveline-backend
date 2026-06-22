@@ -41,11 +41,22 @@ def _to_json(obj):
 
 
 def get_summary_today():
-    """오늘 데이터 없으면 최근 7일 중 가장 최신. 모니터링#3 테이블 값이 있으면 카드에 우선 표시."""
+    """오늘 데이터 없으면 최근 7일 중 가장 최신. 모니터링#3 테이블 값이 있으면 카드에 우선 표시.
+
+    팀 통합: DASHBOARD_TABLE 이 모니터링#3 dashboard_summary 테이블 (service + date 복합 키) 과
+    통합됨. 옛 단일 키 (summaryDate) 대신 복합 키로 조회.
+    """
     base = {"found": False, "message": "최근 7일 내 데이터 없음"}
     for delta in range(7):
         date_str = (datetime.now(timezone.utc) - timedelta(days=delta)).strftime("%Y-%m-%d")
-        resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"summaryDate": date_str})
+        try:
+            resp = ddb.Table(DASHBOARD_TABLE).get_item(
+                Key={"service": MONITORING_SVC, "date": date_str}
+            )
+        except Exception as e:
+            # 키 스키마 불일치 등 — 무시하고 다음 날짜로
+            print(f"[get_summary_today] 키 조회 실패 ({date_str}): {e}")
+            continue
         item = resp.get("Item")
         if item:
             base = _to_json(item)

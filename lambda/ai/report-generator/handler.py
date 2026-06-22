@@ -17,6 +17,7 @@ REPORT_TABLE = os.environ["REPORT_TABLE"]
 DASHBOARD_TABLE = os.environ.get("DASHBOARD_TABLE", "")
 CHECK_TABLE = os.environ.get("CHECK_TABLE", "")
 MODEL_ID = os.environ.get("MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+MONITORING_SVC = os.environ.get("MONITORING_SERVICE_KEY", "ecommerce")
 
 bedrock = boto3.client("bedrock-runtime")
 ddb = boto3.resource("dynamodb")
@@ -24,11 +25,13 @@ s3 = boto3.client("s3")
 
 
 def get_dashboard_summary(date_str):
-    """오늘 대시보드 요약 1건"""
+    """오늘 대시보드 요약 1건. 팀 통합: service + date 복합 키."""
     if not DASHBOARD_TABLE:
         return None
     try:
-        resp = ddb.Table(DASHBOARD_TABLE).get_item(Key={"summaryDate": date_str})
+        resp = ddb.Table(DASHBOARD_TABLE).get_item(
+            Key={"service": MONITORING_SVC, "date": date_str}
+        )
         return resp.get("Item")
     except Exception as e:
         print(f"dashboard fetch error: {e}")
