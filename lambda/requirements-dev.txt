@@ -1,0 +1,8 @@
+# Lambda pytest 개발 의존성
+# 설치: pip install -r lambda/requirements-dev.txt
+
+pytest>=7.4.0
+pytest-mock>=3.12.0
+
+# 핸들러 의존성 (모킹 대상)
+boto3>=1.34.0
