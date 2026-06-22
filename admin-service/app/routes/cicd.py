@@ -277,3 +277,54 @@ async def canary_probe(
         "avg_latency_ms": avg,
         "canary_only": True,
     }
+
+
+PROMETHEUS_URL = "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+
+
+@router.get("/pod-metrics")
+async def pod_metrics(
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    service: str = Query("order-service"),
+):
+    """Prometheus에서 Stable/Canary 파드 CPU·메모리 쿼리."""
+    container = service
+
+    async def query(promql: str) -> list[dict]:
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": promql})
+            r.raise_for_status()
+            return r.json().get("data", {}).get("result", [])
+
+    try:
+        cpu_results = await query(
+            f'rate(container_cpu_usage_seconds_total{{namespace="{NAMESPACE}",container="{container}"}}[1m])'
+        )
+        mem_results = await query(
+            f'container_memory_working_set_bytes{{namespace="{NAMESPACE}",container="{container}"}}'
+        )
+
+        def parse_pods(results: list[dict], unit: float = 1.0) -> dict[str, float]:
+            return {
+                r["metric"].get("pod", ""): round(float(r["value"][1]) * unit, 4)
+                for r in results if r.get("value")
+            }
+
+        cpu_by_pod = parse_pods(cpu_results, unit=100)   # → % cores
+        mem_by_pod = parse_pods(mem_results, unit=1 / 1024 / 1024)  # → MiB
+
+        pods = []
+        for pod in set(list(cpu_by_pod) + list(mem_by_pod)):
+            role = "canary" if "canary" in pod else "stable"
+            pods.append({
+                "pod": pod,
+                "role": role,
+                "cpu_percent": cpu_by_pod.get(pod),
+                "memory_mib": mem_by_pod.get(pod),
+            })
+
+        pods.sort(key=lambda p: (p["role"], p["pod"]))
+        return {"service": service, "pods": pods}
+
+    except Exception as e:
+        return {"service": service, "pods": [], "error": str(e)}
