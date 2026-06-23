@@ -63,34 +63,28 @@ def rollout_action(
 ):
     if body.action == "promote":
         token = _k8s_token()
-        base_url = (
+        status_url = (
             f"{K8S_API_HOST}/apis/argoproj.io/v1alpha1"
-            f"/namespaces/{NAMESPACE}/rollouts/{body.service_name}"
+            f"/namespaces/{NAMESPACE}/rollouts/{body.service_name}/status"
         )
         with httpx.Client(verify=K8S_CA_PATH, timeout=10.0) as http:
-            get_resp = http.get(
-                base_url,
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            )
-            if get_resp.status_code >= 400:
-                raise HTTPException(status_code=get_resp.status_code, detail=get_resp.text)
-
-            rollout = get_resp.json()
-            status = rollout.setdefault("status", {})
-            status.pop("pauseConditions", None)
-            status["controllerPause"] = False
-
-            put_resp = http.put(
-                f"{base_url}/status",
+            patch_resp = http.patch(
+                status_url,
                 headers={
                     "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
+                    "Content-Type": "application/merge-patch+json",
                     "Accept": "application/json",
                 },
-                content=json.dumps(rollout),
+                content=json.dumps({
+                    "status": {
+                        "pauseConditions": None,
+                        "controllerPause": False,
+                        "abort": False,
+                    }
+                }),
             )
-        if put_resp.status_code >= 400:
-            raise HTTPException(status_code=put_resp.status_code, detail=put_resp.text)
+        if patch_resp.status_code >= 400:
+            raise HTTPException(status_code=patch_resp.status_code, detail=patch_resp.text)
 
     elif body.action == "abort":
         try:
