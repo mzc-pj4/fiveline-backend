@@ -69,8 +69,11 @@ def rollout_action(
                 namespace=NAMESPACE, plural="rollouts",
                 name=body.service_name,
             )
+            steps = rollout.get("spec", {}).get("strategy", {}).get("canary", {}).get("steps", [])
             if "status" not in rollout:
                 rollout["status"] = {}
+            # kubectl argo rollouts promote와 동일: step index를 끝으로 당기고 pause 해제
+            rollout["status"]["currentStepIndex"] = len(steps)
             rollout["status"]["pauseConditions"] = None
             rollout["status"]["controllerPause"] = False
             rollout["status"]["abort"] = False
