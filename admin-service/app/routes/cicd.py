@@ -62,32 +62,26 @@ def rollout_action(
     body: RolloutActionRequest,
 ):
     if body.action == "promote":
-        token = _k8s_token()
-        auth_headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        }
-        base_url = (
-            f"{K8S_API_HOST}/apis/argoproj.io/v1alpha1"
-            f"/namespaces/{NAMESPACE}/rollouts/{body.service_name}"
-        )
-        with httpx.Client(verify=K8S_CA_PATH, timeout=10.0) as http:
-            get_resp = http.get(base_url, headers=auth_headers)
-            if get_resp.status_code >= 400:
-                raise HTTPException(status_code=get_resp.status_code, detail=get_resp.text)
-            rollout = get_resp.json()
+        try:
+            api = _get_custom_api()
+            rollout = api.get_namespaced_custom_object(
+                group="argoproj.io", version="v1alpha1",
+                namespace=NAMESPACE, plural="rollouts",
+                name=body.service_name,
+            )
             if "status" not in rollout:
                 rollout["status"] = {}
-            rollout["status"]["pauseConditions"] = []
+            rollout["status"]["pauseConditions"] = None
             rollout["status"]["controllerPause"] = False
             rollout["status"]["abort"] = False
-            put_resp = http.put(
-                f"{base_url}/status",
-                headers={**auth_headers, "Content-Type": "application/json"},
-                content=json.dumps(rollout),
+            api.replace_namespaced_custom_object_status(
+                group="argoproj.io", version="v1alpha1",
+                namespace=NAMESPACE, plural="rollouts",
+                name=body.service_name,
+                body=rollout,
             )
-        if put_resp.status_code >= 400:
-            raise HTTPException(status_code=put_resp.status_code, detail=put_resp.text)
+        except ApiException as e:
+            raise HTTPException(status_code=e.status, detail=e.reason)
 
     elif body.action == "abort":
         try:
@@ -123,11 +117,14 @@ def _classify_step(step: dict, pause_conditions: list) -> dict:
 
 def _get_analysis_runs(service: str, canary_hash: str) -> list:
     try:
-        runs = _get_custom_api().list_namespaced_custom_object(
+        label_selector = f"rollouts-pod-template-hash={canary_hash}" if canary_hash else None
+        kwargs = dict(
             group="argoproj.io", version="v1alpha1",
             namespace=NAMESPACE, plural="analysisruns",
-            label_selector=f"rollouts-pod-template-hash={canary_hash}",
         )
+        if label_selector:
+            kwargs["label_selector"] = label_selector
+        runs = _get_custom_api().list_namespaced_custom_object(**kwargs)
         result = []
         for r in runs.get("items", []):
             meta = r.get("metadata", {})
@@ -168,7 +165,9 @@ def _get_analysis_runs(service: str, canary_hash: str) -> list:
             })
         result.sort(key=lambda x: x["started_at"] or "")
         return result
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"_get_analysis_runs failed: {e}")
         return []
 
 
