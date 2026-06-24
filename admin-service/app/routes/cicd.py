@@ -123,11 +123,14 @@ def _classify_step(step: dict, pause_conditions: list) -> dict:
 
 def _get_analysis_runs(service: str, canary_hash: str) -> list:
     try:
-        runs = _get_custom_api().list_namespaced_custom_object(
+        label_selector = f"rollouts-pod-template-hash={canary_hash}" if canary_hash else None
+        kwargs = dict(
             group="argoproj.io", version="v1alpha1",
             namespace=NAMESPACE, plural="analysisruns",
-            label_selector=f"rollouts-pod-template-hash={canary_hash}",
         )
+        if label_selector:
+            kwargs["label_selector"] = label_selector
+        runs = _get_custom_api().list_namespaced_custom_object(**kwargs)
         result = []
         for r in runs.get("items", []):
             meta = r.get("metadata", {})
@@ -168,7 +171,9 @@ def _get_analysis_runs(service: str, canary_hash: str) -> list:
             })
         result.sort(key=lambda x: x["started_at"] or "")
         return result
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"_get_analysis_runs failed: {e}")
         return []
 
 
