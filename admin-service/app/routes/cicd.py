@@ -62,26 +62,13 @@ def rollout_action(
     body: RolloutActionRequest,
 ):
     if body.action == "promote":
-        try:
-            api = _get_custom_api()
-            rollout = api.get_namespaced_custom_object(
-                group="argoproj.io", version="v1alpha1",
-                namespace=NAMESPACE, plural="rollouts",
-                name=body.service_name,
-            )
-            if "status" not in rollout:
-                rollout["status"] = {}
-            rollout["status"]["pauseConditions"] = None
-            rollout["status"]["controllerPause"] = False
-            rollout["status"]["abort"] = False
-            api.replace_namespaced_custom_object_status(
-                group="argoproj.io", version="v1alpha1",
-                namespace=NAMESPACE, plural="rollouts",
-                name=body.service_name,
-                body=rollout,
-            )
-        except ApiException as e:
-            raise HTTPException(status_code=e.status, detail=e.reason)
+        # Argo Rollouts 대시보드 API 서버 직접 호출 (가장 신뢰할 수 있는 방법)
+        argo_api = "http://argo-rollouts.argo-rollouts.svc.cluster.local:3100"
+        promote_url = f"{argo_api}/api/v1/namespaces/{NAMESPACE}/rollouts/{body.service_name}/promote"
+        with httpx.Client(timeout=10.0) as http:
+            resp = http.put(promote_url)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
     elif body.action == "abort":
         try:
