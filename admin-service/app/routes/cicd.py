@@ -133,6 +133,27 @@ def _get_analysis_runs(service: str, canary_hash: str) -> list:
             meta = r.get("metadata", {})
             status = r.get("status", {})
             metrics = status.get("metricResults", [])
+
+            metric_details = []
+            for m in metrics:
+                measurements = m.get("measurements", [])
+                values = []
+                for meas in measurements:
+                    raw = meas.get("value")
+                    try:
+                        values.append(round(float(raw), 2))
+                    except (TypeError, ValueError):
+                        pass
+                metric_details.append({
+                    "name": m.get("name", ""),
+                    "phase": m.get("phase", "Unknown"),
+                    "successful": m.get("successful", 0),
+                    "failed": m.get("failed", 0),
+                    "error": m.get("error", 0),
+                    "latest_value": values[-1] if values else None,
+                    "values": values,
+                })
+
             successful = sum(m.get("successful", 0) for m in metrics)
             failed = sum(m.get("failed", 0) for m in metrics)
             error = sum(m.get("error", 0) for m in metrics)
@@ -143,6 +164,7 @@ def _get_analysis_runs(service: str, canary_hash: str) -> list:
                 "failed": failed,
                 "error": error,
                 "started_at": meta.get("creationTimestamp"),
+                "metric_details": metric_details,
             })
         result.sort(key=lambda x: x["started_at"] or "")
         return result
