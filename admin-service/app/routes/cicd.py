@@ -66,7 +66,7 @@ def rollout_action(
         argo_api = "http://argo-rollouts.argo-rollouts.svc.cluster.local:3100"
         promote_url = f"{argo_api}/api/v1/namespaces/{NAMESPACE}/rollouts/{body.service_name}/promote"
         with httpx.Client(timeout=10.0) as http:
-            resp = http.put(promote_url)
+            resp = http.get(promote_url)
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
