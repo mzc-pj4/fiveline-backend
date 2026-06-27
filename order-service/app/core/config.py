@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     product_service_url: str = "http://product-service:8002"
     product_service_timeout_s: float = 3.0
 
-    failure_rate: float = 0.05
+    failure_rate: float = 0.0
     slow_rate: float = 0.03
     slow_response_ms_min: int = 1500
     slow_response_ms_max: int = 3500
