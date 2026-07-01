@@ -30,6 +30,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AccessLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000", "https://d330d0cjfkz4e7.cloudfront.net"],
@@ -37,7 +38,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AccessLogMiddleware)
 
 app.include_router(health.router)
 app.include_router(cart.router)
@@ -63,4 +63,4 @@ async def metrics_endpoint():
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"service": settings.service_name, "docs": "/docs"}
+    return {"service": settings.service_name, "version": "1.0.3", "docs": "/docs"}
