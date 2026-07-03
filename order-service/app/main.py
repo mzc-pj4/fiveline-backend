@@ -63,4 +63,4 @@ async def metrics_endpoint():
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"service": settings.service_name, "version": "1.0.3", "docs": "/docs"}
+    return {"service": settings.service_name, "version": "1.0.4", "docs": "/docs"}
