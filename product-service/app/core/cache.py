@@ -1,7 +1,6 @@
 import logging
 
 import redis
-
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
