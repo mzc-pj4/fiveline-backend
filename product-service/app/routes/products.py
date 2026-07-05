@@ -1,7 +1,11 @@
+import hashlib
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
+from app.core.cache import get_redis
 from app.core.logging import log_service_event
 from app.db.session import get_db
 from app.models.product import Product
@@ -9,6 +13,15 @@ from app.models.review import Review
 from app.schemas.product import ProductCreate, ProductList, ProductListItem, ProductPublic
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+CACHE_TTL_LIST = 300
+CACHE_TTL_DETAIL = 600
+CACHE_TTL_BRANDS = 1800
+
+
+def _make_key(prefix: str, **kwargs) -> str:
+    raw = json.dumps(kwargs, sort_keys=True, default=str)
+    return f"{prefix}:{hashlib.md5(raw.encode()).hexdigest()}"
 
 
 @router.get("", response_model=ProductList)
@@ -23,6 +36,21 @@ def list_products(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
 ) -> ProductList:
+    cache_key = _make_key(
+        "products:list",
+        q=q, category=category, brand=brand,
+        min_price=min_price, max_price=max_price,
+        sort=sort, page=page, size=size,
+    )
+    r = get_redis()
+    if r:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                return ProductList.model_validate_json(cached)
+        except Exception:
+            pass
+
     stmt = select(Product)
     if q:
         stmt = stmt.where(
@@ -75,7 +103,13 @@ def list_products(
         "PRODUCT_SEARCH" if (q or category) else "PRODUCT_LIST_VIEW",
         q=q, category=category, result_count=len(items), total=total,
     )
-    return ProductList(items=items, total=total, page=page, size=size)
+    result = ProductList(items=items, total=total, page=page, size=size)
+    if r:
+        try:
+            r.setex(cache_key, CACHE_TTL_LIST, result.model_dump_json())
+        except Exception:
+            pass
+    return result
 
 
 _GENDER_SUFFIXES = (" 우먼", " 맨", " 여성", " 남성", " women", " men")
@@ -85,6 +119,16 @@ def list_brands(
     db: Session = Depends(get_db),
     limit: int = Query(default=20, ge=1, le=50),
 ) -> list[str]:
+    cache_key = _make_key("products:brands", limit=limit)
+    r = get_redis()
+    if r:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+
     rows = db.execute(
         select(Product.brand, func.count(Product.id).label("cnt"))
         .where(Product.brand.isnot(None), Product.brand != "")
@@ -111,16 +155,38 @@ def list_brands(
             result.append(b)
         if len(result) >= limit:
             break
+
+    if r:
+        try:
+            r.setex(cache_key, CACHE_TTL_BRANDS, json.dumps(result))
+        except Exception:
+            pass
     return result
 
 
 @router.get("/{product_id}", response_model=ProductPublic)
 def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductPublic:
+    cache_key = f"products:detail:{product_id}"
+    r = get_redis()
+    if r:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                return ProductPublic.model_validate_json(cached)
+        except Exception:
+            pass
+
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "product not found")
     log_service_event("PRODUCT_VIEW", product_id=product_id, category=product.category)
-    return ProductPublic.model_validate(product)
+    result = ProductPublic.model_validate(product)
+    if r:
+        try:
+            r.setex(cache_key, CACHE_TTL_DETAIL, result.model_dump_json())
+        except Exception:
+            pass
+    return result
 
 
 @router.post("", response_model=ProductPublic, status_code=status.HTTP_201_CREATED)

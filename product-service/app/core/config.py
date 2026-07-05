@@ -22,5 +22,7 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
+    redis_url: str | None = None
+
 
 settings = Settings()

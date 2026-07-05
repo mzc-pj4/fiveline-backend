@@ -47,6 +47,8 @@ pydantic-settings==2.14.1
     # via product-service (pyproject.toml)
 pyjwt==2.13.0
     # via product-service (pyproject.toml)
+redis==5.2.1
+    # via product-service (pyproject.toml)
 python-dotenv==1.2.2
     # via
     #   pydantic-settings
