@@ -326,9 +326,6 @@ jobs:
                   f.write(f'risk_level={risk_level}\n')
                   f.write(f'risk_reason={risk_reason}\n')
 
-          requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
-              'text': f"🤖 *product-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
-          })
           print(analysis)
           EOF
 
