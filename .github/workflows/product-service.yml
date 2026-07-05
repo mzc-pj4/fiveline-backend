@@ -22,26 +22,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Run tests
-        run: echo "Tests temporarily disabled"
-
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: test
     if: true
     continue-on-error: true
 
@@ -181,8 +164,6 @@ jobs:
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
-    needs: sonarcloud
-    if: always()
 
     steps:
       - name: Checkout code
@@ -202,7 +183,7 @@ jobs:
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
-    needs: dependency-check
+    needs: [sonarcloud, dependency-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -419,7 +400,6 @@ jobs:
     name: Update Manifest Repo
     runs-on: ubuntu-latest
     needs: trivy-scan
-    environment: production
 
     steps:
       - name: Update image tag and create PR
@@ -431,10 +411,10 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/product-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline/product-service:.*|fiveline/product-service:${IMAGE_TAG}|" k8s/apps/base/product-service/rollout.yaml
+          sed -i "s|newTag:.*|newTag: ${IMAGE_TAG}|" k8s/apps/base/product-service/kustomization.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git add k8s/apps/base/product-service/rollout.yaml
+          git add k8s/apps/base/product-service/kustomization.yaml
           git commit -m "chore: update product-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
           gh pr create \
@@ -598,7 +578,6 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     needs: update-manifest
-    if: false
 
     steps:
       - name: Slack 알림

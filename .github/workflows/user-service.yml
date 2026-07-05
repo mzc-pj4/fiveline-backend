@@ -22,26 +22,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Run tests
-        run: echo "Tests temporarily disabled"
-
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: test
     if: true
     continue-on-error: true
 
@@ -165,8 +148,6 @@ jobs:
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
-    needs: sonarcloud
-    if: always()
 
     steps:
       - name: Checkout code
@@ -186,7 +167,7 @@ jobs:
   build-and-push:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
-    needs: dependency-check
+    needs: [sonarcloud, dependency-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -328,10 +309,9 @@ jobs:
                   f.write(f'risk_level={risk_level}\n')
                   f.write(f'risk_reason={risk_reason}\n')
 
-          # 알림 비활성화 (복구하려면 아래 주석 해제)
-          # requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
-          #     'text': f"🤖 *user-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
-          # })
+          requests.post(os.environ['SLACK_WEBHOOK_URL'], json={
+              'text': f"🤖 *user-service 배포 위험도 분석 (Bedrock)*\n{analysis}"
+          })
           print(analysis)
           EOF
 
@@ -406,7 +386,6 @@ jobs:
     name: Update Manifest Repo
     runs-on: ubuntu-latest
     needs: trivy-scan
-    environment: production
 
     steps:
       - name: Update image tag and create PR
@@ -418,10 +397,10 @@ jobs:
           cd fiveline_k8s_manifest
           BRANCH=deploy/user-service-${{ github.run_number }}
           git checkout -b $BRANCH
-          sed -i "s|fiveline/user-service:.*|fiveline/user-service:${IMAGE_TAG}|" k8s/apps/base/user-service/rollout.yaml
+          sed -i "s|newTag:.*|newTag: ${IMAGE_TAG}|" k8s/apps/base/user-service/kustomization.yaml
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git add k8s/apps/base/user-service/rollout.yaml
+          git add k8s/apps/base/user-service/kustomization.yaml
           git commit -m "chore: update user-service image tag to ${IMAGE_TAG}"
           git push origin $BRANCH
           gh pr create \
@@ -585,7 +564,6 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     needs: update-manifest
-    if: false
 
     steps:
       - name: Slack 알림
