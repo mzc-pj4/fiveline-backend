@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
-from app.core.cache import get_redis
+from app.core.cache import get_redis, get_redis_read
 from app.core.logging import log_service_event
 from app.db.session import get_db
 from app.models.product import Product
@@ -42,10 +42,10 @@ def list_products(
         min_price=min_price, max_price=max_price,
         sort=sort, page=page, size=size,
     )
-    r = get_redis()
-    if r:
+    r_r = get_redis_read()
+    if r_r:
         try:
-            cached = r.get(cache_key)
+            cached = r_r.get(cache_key)
             if cached:
                 return ProductList.model_validate_json(cached)
         except Exception:
@@ -104,9 +104,10 @@ def list_products(
         q=q, category=category, result_count=len(items), total=total,
     )
     result = ProductList(items=items, total=total, page=page, size=size)
-    if r:
+    r_w = get_redis()
+    if r_w:
         try:
-            r.setex(cache_key, CACHE_TTL_LIST, result.model_dump_json())
+            r_w.setex(cache_key, CACHE_TTL_LIST, result.model_dump_json())
         except Exception:
             pass
     return result
@@ -120,10 +121,10 @@ def list_brands(
     limit: int = Query(default=20, ge=1, le=50),
 ) -> list[str]:
     cache_key = _make_key("products:brands", limit=limit)
-    r = get_redis()
-    if r:
+    r_r = get_redis_read()
+    if r_r:
         try:
-            cached = r.get(cache_key)
+            cached = r_r.get(cache_key)
             if cached:
                 return json.loads(cached)
         except Exception:
@@ -156,9 +157,10 @@ def list_brands(
         if len(result) >= limit:
             break
 
-    if r:
+    r_w = get_redis()
+    if r_w:
         try:
-            r.setex(cache_key, CACHE_TTL_BRANDS, json.dumps(result))
+            r_w.setex(cache_key, CACHE_TTL_BRANDS, json.dumps(result))
         except Exception:
             pass
     return result
@@ -167,10 +169,10 @@ def list_brands(
 @router.get("/{product_id}", response_model=ProductPublic)
 def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductPublic:
     cache_key = f"products:detail:{product_id}"
-    r = get_redis()
-    if r:
+    r_r = get_redis_read()
+    if r_r:
         try:
-            cached = r.get(cache_key)
+            cached = r_r.get(cache_key)
             if cached:
                 return ProductPublic.model_validate_json(cached)
         except Exception:
@@ -181,9 +183,10 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductPublic
         raise HTTPException(status.HTTP_404_NOT_FOUND, "product not found")
     log_service_event("PRODUCT_VIEW", product_id=product_id, category=product.category)
     result = ProductPublic.model_validate(product)
-    if r:
+    r_w = get_redis()
+    if r_w:
         try:
-            r.setex(cache_key, CACHE_TTL_DETAIL, result.model_dump_json())
+            r_w.setex(cache_key, CACHE_TTL_DETAIL, result.model_dump_json())
         except Exception:
             pass
     return result
